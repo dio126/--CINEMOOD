@@ -5,8 +5,15 @@
 管线步骤:
   1. 清洗:去除 HTML 标签 / URL / 多余空白;
   2. jieba 分词;
-  3. 停用词过滤(哈工大停用词表);
-  4. 合并官方 train+dev 后按 8:1:1 重新划分 训练/验证/测试(固定种子 42,可复现);
+  3. 停用词过滤(在线哈工大表下载失败时用代码内置精简停用词表,
+     该内置表已剔除否定词与程度副词,避免破坏情感极性);
+  4. 否定词合并:把"不/没/别"与其紧邻的下一个词合并成一个词
+     (如 不+满意→不满意、没+亮点→没亮点)。原因:Bi-LSTM 需要在序列中
+     自行组合"不+X"的否定语义,预训练词向量下该组合较难学到;
+     合并后否定信息固化为单个词,情感方向更明确,训练与推理统一使用本规则;
+  5. 文本去重:同文本标签一致的只保留 1 条,标签冲突的整组丢弃(防测试集
+     文本泄漏进训练集导致指标虚高),去重后合并数据按 8:1:1 重新划分
+     训练/验证/测试(固定种子 42,可复现);
   5. 词汇表【仅由训练集构建】—— 避免验证/测试集词泄漏到训练特征中(数据泄漏),
      上限 50000 词,特殊符号 <PAD>=0、<UNK>=1;
   6. 文本转整数序列,padding / 截断至 maxlen=128;
@@ -62,7 +69,11 @@ def clean_text(text: str) -> str:
 
 
 def load_stopwords(path: str = None) -> set:
-    """加载停用词表(每行一个词,# 开头为注释行)。"""
+    """加载停用词表(每行一个词,# 开头为注释行)。
+
+    实际生效的可能是代码内置精简表(在线哈工大表下载失败时生成,
+    已剔除否定词与程度副词以保留情感极性,见 download_data.py 说明)。
+    """
     path = path or STOPWORDS_FILE
     stopwords = set()
     if os.path.exists(path):
@@ -79,9 +90,32 @@ def load_stopwords(path: str = None) -> set:
 # 模块级缓存:同一进程内(HF 训练循环、Streamlit 多次推理)避免重复读文件
 _STOPWORDS_CACHE = None
 
+# 否定词集合:与紧邻的下一个词合并,把否定语义固化到词内(见文件头说明)
+NEGATION_WORDS = {"不", "没", "别"}
+
+
+def _merge_negation(words: list) -> list:
+    """把否定词(不/没/别)与其紧邻的下一个词合并:不满意、没亮点、别去。
+
+    这是中文情感分析的标准预处理手段:Bi-LSTM 对"不+X"的远距离组合学习较难
+    (尤其在使用预训练词向量时,"不"的向量偏功能词语义),合并后情感方向
+    由单个词直接承载,显著提升否定句判别。训练与推理共用本函数(一致性关键)。
+    """
+    merged = []
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if w in NEGATION_WORDS and i + 1 < len(words):
+            merged.append(w + words[i + 1])  # 例如 不+满意 → 不满意
+            i += 2
+        else:
+            merged.append(w)
+            i += 1
+    return merged
+
 
 def tokenize(text: str) -> list:
-    """清洗 + jieba 分词 + 停用词过滤,返回词列表。训练与推理共用(一致性关键)。"""
+    """清洗 + jieba 分词 + 停用词过滤 + 否定词合并,返回词列表。训练与推理共用。"""
     global _STOPWORDS_CACHE
     if _STOPWORDS_CACHE is None:
         _STOPWORDS_CACHE = load_stopwords()
@@ -90,7 +124,9 @@ def tokenize(text: str) -> list:
     text = clean_text(text)
     words = jieba.lcut(text)
     # 过滤:停用词、空串、纯符号词(保留中文、字母、数字)
-    return [w for w in words if w and w not in _STOPWORDS_CACHE and not _RE_NONWORD.match(w)]
+    words = [w for w in words if w and w not in _STOPWORDS_CACHE and not _RE_NONWORD.match(w)]
+    # 否定词与紧邻词合并(必须在停用词过滤之后,保证"不"不被误删后错位合并)
+    return _merge_negation(words)
 
 
 def build_vocab(token_lists: list, max_size: int = MAX_VOCAB_SIZE) -> dict:
@@ -129,7 +165,21 @@ def run_preprocess():
     df = pd.read_csv(RAW_CSV)
     df["text"] = df["text"].astype(str)
     df["label"] = df["label"].astype(int)
-    print(f"[preprocess] 原始样本数: {len(df)},标签分布: {df['label'].value_counts().to_dict()}")
+    print(f"[preprocess] 去重前样本数: {len(df)},标签分布: {df['label'].value_counts().to_dict()}")
+
+    # 1.5) 文本去重(关键,防泄漏):原始语料存在大量重复评论,若不去重,
+    #      同一文本会同时出现在训练集与测试集,测试指标虚高。
+    #      规则:同一文本标签一致的只保留 1 条;标签冲突(同一文本正负都有)的整组丢弃。
+    n_before = len(df)
+    label_nunique = df.groupby("text")["label"].transform("nunique")
+    conflict_texts = set(df.loc[label_nunique > 1, "text"])
+    n_conflict = int((df["text"].isin(conflict_texts)).sum())
+    df = df[(label_nunique == 1) & ~df["text"].isin(conflict_texts)]
+    df = df.drop_duplicates(subset="text", keep="first").reset_index(drop=True)
+    print(
+        f"[preprocess] 去重后样本数: {len(df)}(去重前 {n_before},丢弃标签冲突 "
+        f"{n_conflict} 条,重复文本各保留 1 条)"
+    )
 
     # 2) 清洗 + 分词 + 停用词过滤(全量一次完成)
     print("[preprocess] 分词中(jieba)...")

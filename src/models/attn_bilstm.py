@@ -74,5 +74,6 @@ class AttnBiLSTMClassifier(nn.Module):
         # ---- 加权求和得到句向量 ----
         context = torch.bmm(attn_weights.unsqueeze(1), outputs).squeeze(1)  # [B, 2H]
 
+        # Dropout 仅在此处施加一次(分类头之前),与 bilstm.py 保持一致
         logits = self.fc(self.dropout(context))
         return logits, attn_weights

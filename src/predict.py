@@ -45,10 +45,10 @@ class SentimentPredictor:
 
     def predict(self, text: str) -> dict:
         """单条文本推理。返回 label/prob/confidence/tokens/attn_weights。"""
-        from preprocess import encode_tokens, tokenize
+        from preprocess import MAXLEN, encode_tokens, tokenize
 
         # 关键:与训练完全一致的预处理路径
-        words = tokenize(text)
+        words = tokenize(text)[:MAXLEN]  # 超过 maxlen 的词截断,保证 tokens 与注意力权重等长
         ids = encode_tokens(words, self.vocab)  # 定长 128,pad=0
         x = torch.tensor(ids[None, :]).to(self.device)
 

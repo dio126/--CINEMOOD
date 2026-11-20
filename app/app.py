@@ -27,7 +27,9 @@ if SRC_DIR not in sys.path:
 OUT_DIR = os.path.join(PROJECT_ROOT, "outputs")
 
 # ---------- 页面全局配置 ----------
-st.set_page_config(page_title="中文情感分析系统", page_icon="🎬", layout="wide")
+st.set_page_config(
+    page_title="中文情感分析系统", page_icon="🎬", layout="wide", initial_sidebar_state="expanded"
+)
 
 
 @st.cache_resource(show_spinner=False)

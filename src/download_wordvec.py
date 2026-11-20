@@ -18,15 +18,15 @@
 说明:GitHub 上的 Chinese-Word-Vectors 仓库文件托管在百度网盘,无法脚本直连,
      故以 HF 镜像/官网/fastText 直链作为候选,均失败才走本语料自训练。
 
-流式读取:逐行解析词向量文本文件,只保留词汇表命中的词,内存占用小;
-未命中词随机初始化 N(0, 0.01);PAD 行置零,UNK 行随机初始化。
+流式读取:逐行/逐词解析词向量文件,只保留词汇表命中的词,内存占用小;
+未命中词按【命中行同量级标准差】随机初始化(幅值对齐,保证可被微调学习);
+PAD 行置零,UNK 行随机初始化。
 """
 
 import gzip
 import io
 import json
 import os
-import shutil
 import sys
 import tarfile
 import time
@@ -76,6 +76,26 @@ def _open_stream(url: str, timeout: int = 60):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
+def _download_to_file(url: str, path: str, deadline: float):
+    """把 URL 内容流式下载到磁盘文件(256KB 分块写盘,不整读内存)。"""
+    total = 0
+    with _open_stream(url, timeout=120) as resp, open(path, "wb") as f:
+        while True:
+            chunk = resp.read(256 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+            total += len(chunk)
+            if total // (20 * 1024 * 1024) != (total - len(chunk)) // (20 * 1024 * 1024):
+                print(f"[wordvec] 已下载 {total // 1048576}MB ...")
+                if time.time() > deadline:
+                    raise TimeoutError("超过下载时间预算")
+
+
+# w2v_bin 源的本地磁盘缓存:先落盘再解析,重建词表/词向量矩阵时无需重复下载
+W2V_BIN_CACHE = os.path.join(RAW_DIR, "tencent_light_word2vec.bin")
+
+
 def _iter_vector_lines_from_gz(url: str):
     """流式逐行产出 (word, np.array) —— 针对 .vec.gz 纯文本格式。"""
     with _open_stream(url) as resp:
@@ -88,29 +108,53 @@ def _iter_vector_lines_from_gz(url: str):
                 yield word, vec
 
 
-def _iter_vector_lines_from_tar_gz(url: str):
-    """流式解析 tar.gz(内含单个 .txt 词向量文件)。"""
-    with _open_stream(url) as resp:
-        data_stream = io.BytesIO(resp.read())  # tar 需要随机读,先读入内存(small 版 ~1GB 内)
-        with tarfile.open(fileobj=data_stream, mode="r:gz") as tar:
-            member = next(m for m in tar.getmembers() if m.name.endswith(".txt"))
-            f = tar.extractfile(member)
-            for raw_line in io.TextIOWrapper(f, encoding="utf-8", errors="ignore"):
-                parts = raw_line.rstrip().split(" ")
-                if len(parts) < 3:
-                    continue
-                word, vec = parts[0], np.asarray(parts[1:], dtype=np.float32)
-                yield word, vec
+def _iter_vector_lines_from_tar_gz(url: str, deadline: float):
+    """解析 tar.gz(内含单个 .txt 词向量文件)。
 
-
-def _iter_vectors_from_w2v_bin(url: str, deadline: float):
-    """流式解析 word2vec【二进制】格式(.bin):
-    头部为 "<词数> <维度>\\n",之后每条为 "词<空格><dim×4字节 float32>"。
-    采用 256KB 块缓冲读取,避免逐字节网络请求,内存占用小。
+    先把压缩包流式下载到临时文件再解包读取,避免把 GB 级数据整块读进内存;
+    用完即删临时文件。
     """
-    with _open_stream(url, timeout=120) as resp:
+    import tempfile
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".tar.gz")
+    os.close(fd)
+    try:
+        _download_to_file(url, tmp_path, deadline)
+        with tarfile.open(tmp_path, mode="r:gz") as tar:
+            member = next(m for m in tar.getmembers() if m.name.endswith(".txt"))
+            with tar.extractfile(member) as f:
+                for raw_line in io.TextIOWrapper(f, encoding="utf-8", errors="ignore"):
+                    parts = raw_line.rstrip().split(" ")
+                    if len(parts) < 3:
+                        continue
+                    yield parts[0], np.asarray(parts[1:], dtype=np.float32)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def _iter_vectors_from_w2v_bin(url: str, deadline: float, cache_path: str = W2V_BIN_CACHE):
+    """解析 word2vec【二进制】格式(.bin):
+    头部为 "<词数> <维度>\\n",之后每条为 "词<空格><dim×4字节 float32>"。
+
+    先把文件流式下载到磁盘缓存(cache_path 已存在则直接复用,重建词表时免重下载),
+    再从本地文件按 256KB 块缓冲解析,内存占用小。
+    """
+    if not os.path.exists(cache_path):
+        print(f"[wordvec] 下载到磁盘缓存: {cache_path}")
+        tmp = cache_path + ".part"
+        try:
+            _download_to_file(url, tmp, deadline)
+            os.replace(tmp, cache_path)  # 原子改名,避免半截缓存被误用
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+    else:
+        print(f"[wordvec] 命中磁盘缓存: {cache_path}(跳过下载)")
+
+    with open(cache_path, "rb") as f:
         buf = b""
-        chunk_iter = iter(lambda: resp.read(256 * 1024), b"")
+        chunk_iter = iter(lambda: f.read(256 * 1024), b"")
 
         def _fill() -> bool:
             nonlocal buf
@@ -122,7 +166,7 @@ def _iter_vectors_from_w2v_bin(url: str, deadline: float):
             nonlocal buf
             while b"\n" not in buf:
                 if not _fill():
-                    raise ValueError("流意外结束(读头部时)")
+                    raise ValueError("文件意外结束(读头部时)")
             line, buf2 = buf.split(b"\n", 1)
             buf = buf2
             return line
@@ -131,7 +175,7 @@ def _iter_vectors_from_w2v_bin(url: str, deadline: float):
             nonlocal buf
             while len(buf) < n:
                 if not _fill():
-                    raise ValueError("流意外结束(读向量时)")
+                    raise ValueError("文件意外结束(读向量时)")
             out, buf2 = buf[:n], buf[n:]
             buf = buf2
             return out
@@ -140,10 +184,8 @@ def _iter_vectors_from_w2v_bin(url: str, deadline: float):
         n_words, dim = map(int, header.split())
         print(f"[wordvec] 二进制头: {n_words} 词 × {dim} 维")
         for i in range(n_words):
-            if i % 20000 == 0:  # 进度提示(下载+解析约需几分钟)
-                if time.time() > deadline:
-                    raise TimeoutError("超过下载时间预算")
-                print(f"[wordvec] 已流式解析 {i}/{n_words} 词({time.time() % 100000:.0f}s)")
+            if i % 20000 == 0:  # 进度提示
+                print(f"[wordvec] 已解析 {i}/{n_words} 词")
             # 读词:UTF-8 字节直到空格(有的实现词前有换行,一并兼容)
             word_bytes = b""
             while True:
@@ -173,7 +215,7 @@ def try_download_and_extract(vocab: dict, deadline: float):
             if fmt == "w2v_bin":
                 iterator = _iter_vectors_from_w2v_bin(url, deadline)
             elif fmt == "tar_gz_txt":
-                iterator = _iter_vector_lines_from_tar_gz(url)
+                iterator = _iter_vector_lines_from_tar_gz(url, deadline)
             else:
                 iterator = _iter_vector_lines_from_gz(url)
             dim = None
@@ -190,11 +232,37 @@ def try_download_and_extract(vocab: dict, deadline: float):
             if dim is None or len(found) == 0:
                 print(f"[wordvec] {name} 解析失败(未取得任何词表命中)")
                 continue
-            # 组装矩阵:PAD=0 全零,UNK 与未命中词随机初始化 N(0,0.01)
-            matrix = rng.normal(0.0, 0.01, size=(len(vocab), dim)).astype(np.float32)
+            # 组装矩阵:PAD=0 全零;未命中词(含 UNK)随机初始化。
+            # 关键:OOV 行的标准差取【预训练命中行自身的整体标准差】而非固定 0.01——
+            # 若 OOV 向量幅值远小于预训练向量,训练/微调时这些词(如合并出的"不满意")
+            # 的输入信号近零,LSTM 学不到其语义;等量级初始化后微调可正常学习。
+            hit_vectors = np.stack(list(found.values()))
+            oov_std = float(hit_vectors.std())
+            print(f"[wordvec] 预训练命中行标准差={oov_std:.4f}(OOV 行按同量级初始化)")
+            matrix = rng.normal(0.0, oov_std, size=(len(vocab), dim)).astype(np.float32)
             matrix[PAD_IDX_LOCAL] = 0.0
             for idx, vec in found.items():
                 matrix[idx] = vec
+            # OOV 组合式初始化:预处理阶段会把 否定词+紧邻词 合并成词(如 不满意),
+            # 这类词多为 OOV。对其可分解部分 否定词+X 且 X 在预训练词表内的,
+            # 用 vec(否定词)+vec(X) 作为初始向量(组合语义,fastText 风格):
+            # 所有 不X 词共享 vec(不) 分量,为分类器提供一致的"否定方向"特征,
+            # 解决稀有 OOV 合并词在低学习率下学不动的问题。
+            n_compositional = 0
+            word_by_idx = {i: w for w, i in vocab.items()}
+            for idx in range(len(vocab)):
+                w = word_by_idx[idx]
+                if idx in found or len(w) < 2:
+                    continue
+                for neg in ("不", "没", "别"):
+                    if w.startswith(neg) and len(w) > len(neg) and vocab.get(w[len(neg):]) in found:
+                        base_idx = vocab[w[len(neg):]]
+                        matrix[idx] = matrix[vocab[neg]] + matrix[base_idx]
+                        n_compositional += 1
+                        break
+            if n_compositional:
+                print(f"[wordvec] OOV 组合式初始化:{n_compositional} 个 否定+X 合并词"
+                      f"用 vec(否定词)+vec(X) 初始化")
             n_real = len(vocab) - 2  # 去掉 PAD/UNK 两个特殊符号
             hit_rate = len(found) / n_real
             print(f"[wordvec] {name} 加载成功:维度 {dim},词表命中 "

@@ -9,6 +9,9 @@
   - 输入序列右侧存在大量 <PAD> 填充,取"最后时间步"实际取到的是 PAD 位置的输出,
     长序列信息会被稀释,短序列则直接是填充隐状态;
   - mask 池化只对真实词对应的隐状态求平均,对不同长度样本更公平,实测收敛更稳。
+
+Dropout 说明:仅在全连接分类头之前对池化后的句向量施加一次 Dropout
+(不在 LSTM 输出序列上重复施加),与文件头的结构描述保持一致。
 """
 
 import torch
@@ -54,7 +57,6 @@ class BiLSTMClassifier(nn.Module):
         mask = x != 0  # [B, T] 真实词位置为 True(PAD=0 为 False)
         emb = self.embedding(x)  # [B, T, D]
         outputs, _ = self.lstm(emb)  # [B, T, 2H]
-        outputs = self.dropout(outputs)
 
         # ---- mask 平均池化:只对有效(非 PAD)位置求平均 ----
         mask_f = mask.unsqueeze(-1).float()  # [B, T, 1]
@@ -62,5 +64,6 @@ class BiLSTMClassifier(nn.Module):
         counts = mask_f.sum(dim=1).clamp(min=1.0)  # [B, 1] 有效长度,防除 0
         pooled = summed / counts  # [B, 2H] 句向量
 
+        # Dropout 仅在此处施加一次(分类头之前)
         logits = self.fc(self.dropout(pooled))
         return logits
