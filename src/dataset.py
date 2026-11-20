@@ -21,10 +21,14 @@ PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 
 
 class SentimentDataset(Dataset):
-    """情感二分类数据集:ids [N, maxlen] int64 / labels [N] int64(1=正面,0=负面)。"""
+    """情感分类数据集:ids [N, maxlen] int64 / labels [N] int64。
 
-    def __init__(self, split: str = "train", processed_dir: str = None):
-        path = os.path.join(processed_dir or PROCESSED_DIR, f"{split}.pkl")
+    suffix 参数用于加载其他任务的同格式产物(如五级分类的 *_5c.pkl);
+    默认 "" 时加载二分类的 {split}.pkl,既有行为完全不变。
+    """
+
+    def __init__(self, split: str = "train", processed_dir: str = None, suffix: str = ""):
+        path = os.path.join(processed_dir or PROCESSED_DIR, f"{split}{suffix}.pkl")
         with open(path, "rb") as f:
             data = pickle.load(f)
         self.ids = data["ids"].astype(np.int64)

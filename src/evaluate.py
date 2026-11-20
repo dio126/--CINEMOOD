@@ -84,16 +84,25 @@ def plot_confusion(cm, out_png: str, run_name: str = ""):
 
 
 def load_checkpoint_for_eval(run_name: str, device=None):
-    """加载检查点并重建模型(供 evaluate 主程序 / attention_viz / predict 复用)。"""
+    """加载检查点并重建模型(供 evaluate 主程序 / attention_viz / predict 复用)。
+
+    兼容说明:旧二分类 ckpt 的 config 无 num_classes 字段,默认按 2 类重建
+    (行为不变);五级分类 ckpt 保存 num_classes=5,按 5 类重建。
+    """
     from dataset import SentimentDataset  # noqa: F401  保持与其他模块一致的导入风格
     from models.attn_bilstm import AttnBiLSTMClassifier
     from models.bilstm import BiLSTMClassifier
-    from preprocess import load_vocab
 
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt_path = os.path.join(OUT_DIR, f"{run_name}_best.pt")
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]  # 训练时保存的模型超参,保证重建结构一致
+    num_classes = cfg.get("num_classes", 2)  # 向后兼容:旧 ckpt 默认二分类
+    # 词表按任务区分:五级分类用独立词表 vocab_5class.json
+    if num_classes == 5:
+        from preprocess_5class import load_vocab_5class as load_vocab
+    else:
+        from preprocess import load_vocab
     vocab = load_vocab()
     if cfg["model"] == "attn_bilstm":
         model = AttnBiLSTMClassifier(
@@ -101,6 +110,7 @@ def load_checkpoint_for_eval(run_name: str, device=None):
             embedding_dim=cfg["embedding_dim"],
             hidden_dim=cfg["hidden_dim"],
             dropout=cfg["dropout"],
+            num_classes=num_classes,
         )
     else:
         model = BiLSTMClassifier(
@@ -108,6 +118,7 @@ def load_checkpoint_for_eval(run_name: str, device=None):
             embedding_dim=cfg["embedding_dim"],
             hidden_dim=cfg["hidden_dim"],
             dropout=cfg["dropout"],
+            num_classes=num_classes,
         )
     model.load_state_dict(ckpt["model_state"])  # 恢复最佳权重
     model.to(device).eval()
