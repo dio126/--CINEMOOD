@@ -1,0 +1,17 @@
+# ===== 数据与模型大文件 =====
+data/raw/
+outputs/*.pt
+*.pt
+*.npy
+data/processed/*.pkl
+
+# ===== Python 运行产物 =====
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.ipynb_checkpoints/
+
+# ===== 其他 =====
+.DS_Store
+Thumbs.db

@@ -1,0 +1,24 @@
+# 中文电影评论情感分析系统依赖
+# 安装方式(在项目根目录,使用项目内虚拟环境):
+#   1. 创建虚拟环境: python -m venv .venv
+#   2. 安装 torch(二选一,按本机 CUDA 情况;本机实测可用的命令如下):
+#      - 有 NVIDIA 显卡(本机 RTX 4060 实测可用,CUDA 12.6 轮子):
+#        .venv/Scripts/python.exe -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu126
+#        注意坑:本机实测 torch 2.11.0+cu128 无法加载(c10.dll 初始化失败,WinError 1114),
+#        请勿使用 cu128 的最新版,固定 2.7.1+cu126。
+#      - 无显卡 / CPU 训练:
+#        .venv/Scripts/python.exe -m pip install torch==2.7.1 -i https://pypi.tuna.tsinghua.edu.cn/simple
+#   3. 安装其余依赖(统一走清华镜像):
+#      .venv/Scripts/python.exe -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 注意:torch 写死为 2.7.1(见上方说明),不走 requirements 安装也可,命令见上。
+torch==2.7.1
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+jieba
+tensorboard
+tqdm
+streamlit
+datasets
