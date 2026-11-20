@@ -9,3 +9,4 @@ attn_lr1e-4_do0.3,attn_bilstm,random,0.0001,128,0.3,64,0.8963,0.8556,0.8474,0.86
 attn_lr1e-4_do0.5,attn_bilstm,random,0.0001,128,0.5,64,0.8815,0.8500,0.8432,0.8558,0.8494,10
 bilstm_lr1e-4_do0.3_pretrained,bilstm,pretrained,0.0001,128,0.3,64,0.8685,0.8685,0.8525,0.8876,0.8697,14
 bilstm_lr1e-4_do0.3_pretune,bilstm,pretrained_finetune,0.0001,128,0.3,64,0.9093,0.9019,0.8891,0.9157,0.9022,11
+attn_lr1e-4_do0.3_pretune,attn_bilstm,pretrained_finetune,0.0001,128,0.3,64,0.8954,0.8907,0.9015,0.8745,0.8878,9

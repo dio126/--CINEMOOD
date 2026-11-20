@@ -1,0 +1,7 @@
+{
+  "run_name": "bilstm_lr1e-4_do0.3_pretune",
+  "test_f1": 0.9022,
+  "test_acc": 0.9019,
+  "test_precision": 0.8891,
+  "test_recall": 0.9157
+}

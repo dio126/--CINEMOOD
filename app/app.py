@@ -11,6 +11,7 @@ Streamlit 情感分析 Web 应用(三页面)
 推理通过 src/predict.py 调用,预处理与训练共用 src/preprocess.py(同一份代码)。
 """
 
+import json
 import os
 import sys
 
@@ -30,11 +31,19 @@ st.set_page_config(page_title="中文情感分析系统", page_icon="🎬", layo
 
 
 @st.cache_resource(show_spinner=False)
-def get_predictor():
+def list_model_runs():
+    """列出 outputs/ 下所有可用模型 run 名。"""
+    if not os.path.isdir(OUT_DIR):
+        return []
+    return sorted(p[:-len("_best.pt")] for p in os.listdir(OUT_DIR) if p.endswith("_best.pt"))
+
+
+@st.cache_resource(show_spinner=False)
+def get_predictor(run_name: str = None):
     """加载推理器(带缓存,避免每次交互都重载模型)。"""
     from predict import SentimentPredictor
 
-    return SentimentPredictor()
+    return SentimentPredictor(run_name)
 
 
 @st.cache_data
@@ -61,7 +70,7 @@ def page_analyze():
         st.warning("请输入评论内容")
         return
 
-    predictor = get_predictor()
+    predictor = get_predictor(st.session_state.get("selected_run"))
     r = predictor.predict(text)
 
     # ---- 极性与置信度 ----
@@ -180,7 +189,7 @@ def page_batch():
     st.header("批量情感分析")
     st.caption("上传含 text 列的 CSV 文件,或在文本域粘贴多行评论(每行一条)。")
 
-    predictor = get_predictor()
+    predictor = get_predictor(st.session_state.get("selected_run"))
     texts = []
 
     up = st.file_uploader("上传 CSV(需包含 text 列)", type=["csv"])
@@ -231,6 +240,23 @@ def page_batch():
 def main():
     st.sidebar.title("🎬 中文情感分析系统")
     st.sidebar.caption("Bi-LSTM / Bi-LSTM+Attention · ChnSentiCorp")
+
+    # 模型选择:默认 best_model.pt 对应 run(测试 F1 最高),可切换注意力模型
+    runs = list_model_runs()
+    default_run = None
+    best_log = os.path.join(OUT_DIR, "best_model_info.json")
+    if os.path.exists(best_log):
+        with open(best_log, encoding="utf-8") as f:
+            default_run = json.load(f).get("run_name")
+    if default_run not in runs and runs:
+        default_run = runs[0]
+    selected_run = st.sidebar.selectbox(
+        "选择模型", runs, index=runs.index(default_run) if default_run in runs else 0
+    )
+    if selected_run:
+        st.sidebar.caption(f"当前模型:{selected_run}")
+    st.session_state["selected_run"] = selected_run  # 供各页面获取所选模型
+
     page = st.sidebar.radio("导航", ["情感分析", "实验仪表盘", "批量分析"])
     if page == "情感分析":
         page_analyze()
