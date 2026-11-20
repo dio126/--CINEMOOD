@@ -1,0 +1,5 @@
+﻿run_name,model,embedding,lr,hidden,dropout,batch_size,best_val_macro_f1,test_acc,test_macro_f1,test_weighted_f1,收敛epoch
+5c_bilstm_random,bilstm,random,0.0005,128,0.3,64,0.4526,0.4518,0.4481,0.4483,3
+5c_bilstm_pretune,bilstm,pretrained_finetune,0.0005,128,0.3,64,0.4549,0.4694,0.4649,0.4651,2
+5c_attn_pretune,attn_bilstm,pretrained_finetune,0.0005,128,0.3,64,0.4650,0.4626,0.4617,0.4619,3
+5c_bilstm_pretune_h256,bilstm,pretrained_finetune,0.0005,256,0.3,64,0.4644,0.4688,0.4725,0.4727,2

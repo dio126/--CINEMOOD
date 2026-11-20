@@ -95,6 +95,11 @@ def load_checkpoint_for_eval(run_name: str, device=None):
 
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt_path = os.path.join(OUT_DIR, f"{run_name}_best.pt")
+    if not os.path.exists(ckpt_path):
+        # 五级分类产物为 <run>_5c_best.pt,按文件存在性自动探测任务类型
+        alt = os.path.join(OUT_DIR, f"{run_name}_5c_best.pt")
+        if os.path.exists(alt):
+            ckpt_path = alt
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]  # 训练时保存的模型超参,保证重建结构一致
     num_classes = cfg.get("num_classes", 2)  # 向后兼容:旧 ckpt 默认二分类
