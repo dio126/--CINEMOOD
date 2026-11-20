@@ -7,6 +7,7 @@
 
 - 训练设备:本机 NVIDIA GeForce RTX 4060 Laptop GPU(CUDA 自动检测,无 GPU 自动回退 CPU)
 - **最佳模型:test_acc 0.8896 / test_F1 0.9022**(`outputs/best_model.pt`)
+- **拓展:五级分类**(豆瓣 1-5 星 → 非常负面~非常正面,最佳 macro-F1 0.4725,见第 7 章)
 - 数据质量保障:语料按文本去重(消除训练/测试文本重叠导致的指标虚高);
   停用词表剔除否定词与程度副词 + 否定词合并 + OOV 组合式初始化,
   对"不满意/不好/不干净"等直接否定结构可稳定判负
@@ -47,17 +48,20 @@ movie-sentiment/
 ├── data/processed/          # train/val/test.pkl、vocab.json、embedding_matrix.npy
 ├── src/
 │   ├── download_data.py     # 数据集获取(HF→镜像→GitHub 三级降级)+ 停用词表
+│   ├── download_dmsc.py     # 五级数据:豆瓣电影短评 dmsc(1-5 星,HF 镜像多候选)
 │   ├── download_wordvec.py  # 预训练词向量获取(OOV 等量级+否定组合式初始化)
 │   ├── eda.py               # 数据统计与长度分布图
 │   ├── preprocess.py        # 清洗/分词/停用词/否定合并/去重/词汇表/序列化(训练推理共用)
-│   ├── dataset.py           # PyTorch Dataset 与 DataLoader(num_workers=0)
+│   ├── preprocess_5class.py # 五级预处理(import 复用 preprocess,独立词表/划分/矩阵)
+│   ├── dataset.py           # PyTorch Dataset 与 DataLoader(num_workers=0,suffix 扩展)
 │   ├── models/bilstm.py     # 基础 Bi-LSTM(mask 平均池化,分类头前单次 Dropout)
 │   ├── models/attn_bilstm.py# Bi-LSTM + Bahdanau Attention(PAD mask)
-│   ├── train.py             # 训练循环+早停+曲线记录+自动评估+追加总表
-│   ├── evaluate.py          # 指标计算 + 混淆矩阵(单一评估代码路径)
+│   ├── train.py             # 二分类训练(早停+曲线+自动评估+总表)
+│   ├── train_5class.py      # 五级训练(逆频率权重,早停监控 macro-F1,独立产物)
+│   ├── evaluate.py          # 指标计算 + 混淆矩阵(单一评估代码路径,任务自适应)
 │   ├── attention_viz.py     # 词级注意力热力图
-│   └── predict.py           # 推理封装(供 Web 调用,含注意力权重,>128 词截断对齐)
-├── app/app.py               # Streamlit 三页面 Web 应用
+│   └── predict.py           # 推理封装(自动识别二分类/五级 ckpt)
+├── app/app.py               # Streamlit 应用(二分类默认 + 可切换五级分类模式)
 ├── outputs/                 # 曲线/混淆矩阵/热力图/对比表/过拟合分析/模型 ckpt
 ├── requirements.txt
 ├── .gitignore
@@ -200,3 +204,76 @@ Web 应用默认加载该模型。
    全局随机种子 42(random/numpy/torch),划分与初始化可复现。
 9. 数据为酒店/书籍/电脑评论(ChnSentiCorp),并非严格"电影评论";课程题目以中文评论情感
    分析为准,数据处理与建模流程不受影响。
+
+## 7. 五级分类拓展(任务书第七章拓展方向 1)
+
+在二分类系统**完整保留、零改动默认行为**的前提下,新增五级情感分类:
+**非常负面(1★)/负面(2★)/中性(3★)/正面(4★)/非常正面(5★)**。
+Web 界面侧边栏"任务模式"可切换(默认仍为二分类)。
+
+### 7.1 数据来源与映射
+
+- **数据集**:豆瓣电影短评 dmsc。任务书提到的 XiangPan/dmsc 在 HF 上不存在
+  (Repository not found),实际采用 HF 镜像上的 **BerlinWang/DMSC**
+  (`DMSC.csv.zip`,150MB,经列名自适应探测含 star 字段,共 212.5 万条带星级短评);
+- **星级映射**:1★=非常负面(0)、2★=负面(1)、3★=中性(2)、4★=正面(3)、
+  5★=非常正面(4);
+- **去重与采样**:同文本去重(与二分类同规则,212.5 万 → 194.1 万,丢弃标签冲突
+  16.4 万条)后**分层抽样每类 10000 条,共 5 万条完全均衡**;
+  (全量星级分布:1★19.1万 / 2★18.0万 / 3★47.5万 / 4★64.2万 / 5★63.8万);
+- **预处理**:复用 preprocess.py 的 tokenize(含否定词合并)——同一份代码路径;
+  独立词表 vocab_5class.json(仅训练集构建,47007 词)、独立 8:1:1 划分
+  (40000/5000/5000,seed=42)、预训练矩阵 embedding_matrix_5class.npy
+  (复用腾讯 light 词向量缓存重建,词表命中 54.4%,OOV 同量级+否定组合式初始化)。
+
+### 7.2 训练设置
+
+- 模型复用 BiLSTMClassifier/AttnBiLSTMClassifier(num_classes=5,模型文件零改动);
+- 类别不均衡:CrossEntropyLoss 使用逆频率权重(本数据均衡,权重≈1,机制保留);
+- 早停监控**验证集 macro-F1**(细粒度任务下比 accuracy 更可靠);
+- 产物独立:<run>_5c_*(best.pt/curves/confusion/metrics/history)+
+  outputs/experiments_summary_5class.csv,与二分类 14 组完全隔离。
+
+### 7.3 实验结果(test 5000 条,全部真实训练产出)
+
+| run | 模型 | 词向量 | lr | hidden | val macro-F1 | test acc | test macro-F1 | test weighted-F1 |
+|---|---|---|---|---|---|---|---|---|
+| 5c_bilstm_random | BiLSTM | random | 5e-4 | 128 | 0.4526 | 0.4518 | 0.4481 | 0.4483 |
+| 5c_bilstm_pretune | BiLSTM | 腾讯微调 | 5e-4 | 128 | 0.4549 | 0.4694 | 0.4649 | 0.4651 |
+| 5c_attn_pretune | +Attention | 腾讯微调 | 5e-4 | 128 | 0.4650 | 0.4626 | 0.4617 | 0.4619 |
+| **5c_bilstm_pretune_h256** | **BiLSTM** | **腾讯微调** | **5e-4** | **256** | 0.4644 | 0.4688 | **0.4725** | 0.4727 |
+
+最佳 run:**5c_bilstm_pretune_h256**(test macro-F1 0.4725)。每类 F1
+(最佳 run):非常负面 0.575 / 负面 0.425 / 中性 0.408 / 正面 0.408 / 非常正面 0.546
+—— 两端等级(强烈情感)明显好于中间等级,符合直觉。
+
+### 7.4 与二分类的对比说明
+
+- 二分类 test acc 0.8896 / F1 0.9022;五级 test acc 0.4688 / macro-F1 0.4725。
+  差距巨大但符合文献规律:**细粒度星级预测中相邻等级语义连续**(3★与4★、
+  1★与2★ 的文本差异远小于正/负差异),随机基线 20%,本模型约为其 2.3 倍;
+- 相邻级混淆统计(attn run):真实 1★ 被判到 2★ 的比例 78%、真实 5★ 被判到
+  4★ 的比例 85%、真实 3★ 被判到 2/4★ 的比例 36%——误差几乎全部落在相邻等级,
+  极性方向(正/负半区)判别远好于精确等级判别;
+- 两条流水线**完全独立**(数据/词表/产物/总表),二分类 14 组实验与界面默认
+  行为零改动(回归自测:否定句/正例输出逐位一致)。
+
+### 7.5 已知限制
+
+1. macro-F1 ≈ 0.47:Bi-LSTM 对细粒度星级区分能力有限,Transformer 类模型
+   (如 BERT)在此任务上可达 0.6+,属后续改进方向;
+2. 相邻等级(尤其 2★/3★/4★)互相混淆仍占错误主体;
+3. 五级模型对短文本(如"还行")置信度低(≈50%),信息量不足时判定趋于保守;
+4. 类别均衡由采样保证;若直接用于真实分布(4/5 星占比高)需注意召回差异。
+
+### 7.6 复现命令
+
+```bash
+PY=.venv/Scripts/python.exe
+cd src
+$PY download_dmsc.py        # 下载 dmsc(zip 留缓存)→ 采样 5 万条均衡数据
+$PY preprocess_5class.py    # 五级预处理 + 词表 + 词向量矩阵(复用腾讯缓存)
+$PY train_5class.py --model bilstm --embedding pretrained_finetune --lr 5e-4 --hidden 256 \
+    --run_name 5c_bilstm_pretune_h256          # 最佳一组;其余 3 组同理换参数
+# Web:streamlit 侧边栏"任务模式"切到"五级分类"即可交互体验
+```

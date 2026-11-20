@@ -210,15 +210,29 @@ def page_footer():
 
 @st.cache_resource(show_spinner=False)
 def list_model_runs():
-    """列出 outputs/ 下所有可用模型 run 名。"""
+    """列出 outputs/ 下所有可用的【二分类】模型 run 名(排除五级 ckpt,防混列)。"""
     if not os.path.isdir(OUT_DIR):
         return []
-    return sorted(p[:-len("_best.pt")] for p in os.listdir(OUT_DIR) if p.endswith("_best.pt"))
+    return sorted(
+        p[:-len("_best.pt")] for p in os.listdir(OUT_DIR)
+        if p.endswith("_best.pt") and not p.endswith("_5c_best.pt")
+    )
+
+
+@st.cache_resource(show_spinner=False)
+def list_model_runs_5class():
+    """列出 outputs/ 下所有可用的【五级分类】模型 run 名(<run>_5c_best.pt)。"""
+    if not os.path.isdir(OUT_DIR):
+        return []
+    return sorted(
+        p[:-len("_5c_best.pt")] for p in os.listdir(OUT_DIR)
+        if p.endswith("_5c_best.pt")
+    )
 
 
 @st.cache_resource(show_spinner=False)
 def get_predictor(run_name: str = None):
-    """加载推理器(带缓存,避免每次交互都重载模型)。"""
+    """加载推理器(带缓存;predict.py 按 ckpt 自动识别二分类/五级)。"""
     from predict import SentimentPredictor
 
     return SentimentPredictor(run_name)
@@ -228,6 +242,23 @@ def get_predictor(run_name: str = None):
 def load_summary_csv():
     path = os.path.join(OUT_DIR, "experiments_summary.csv")
     return pd.read_csv(path, encoding="utf-8-sig") if os.path.exists(path) else None
+
+
+@st.cache_data
+def load_summary_csv_5class():
+    """五级分类实验总表(与二分类独立)。"""
+    path = os.path.join(OUT_DIR, "experiments_summary_5class.csv")
+    return pd.read_csv(path, encoding="utf-8-sig") if os.path.exists(path) else None
+
+
+# 五级分类的等级样式:(类名, emoji, 主题色, 英文标注)——横幅/堆叠条共用
+LEVEL_STYLES = [
+    ("非常负面", "😡", "#b71c1c", "VERY NEGATIVE"),
+    ("负面", "😞", "#d32f2f", "NEGATIVE"),
+    ("中性", "😐", "#78909c", "NEUTRAL"),
+    ("正面", "🙂", "#2e7d32", "POSITIVE"),
+    ("非常正面", "🤩", "#00c853", "VERY POSITIVE"),
+]
 
 
 # 快速示例(点击即填入输入框,session key 与 text_area 绑定)
@@ -269,25 +300,44 @@ def page_analyze():
         predictor = get_predictor(st.session_state.get("selected_run"))
         r = predictor.predict(text)
 
-    # ---- 结论横幅:极性 + 大号置信度 ----
-    is_pos = r["label"] == 1
-    st.markdown(
-        f'<div class="verdict {"pos" if is_pos else "neg"}">'
-        f'<div class="v-emoji">{"😊" if is_pos else "😞"}</div>'
-        f'<div><div class="v-label">{"正面评价 POSITIVE" if is_pos else "负面评价 NEGATIVE"}</div>'
-        f'<div class="v-sub">模型:{predictor.run_name} · 置信度 {r["confidence"]:.1%}</div></div>'
-        f'<div class="v-pct">{r["confidence"]:.1%}</div></div>',
-        unsafe_allow_html=True,
-    )
+    # ---- 结论横幅:按任务模式渲染(二分类样式与原版完全一致)----
+    if r.get("num_classes") == 5:
+        # 五级横幅:等级专属配色(深红/红/灰/绿/亮绿)+ emoji
+        name, emoji, color, en = LEVEL_STYLES[r["label"]]
+        st.markdown(
+            f'<div class="verdict" style="background:linear-gradient(135deg,'
+            f'{color}33, {color}0d); border:1px solid {color}99">'
+            f'<div class="v-emoji">{emoji}</div>'
+            f'<div><div class="v-label" style="color:{color}">{name}评价 {en}</div>'
+            f'<div class="v-sub">模型:{predictor.run_name} · 置信度 {r["confidence"]:.1%}</div></div>'
+            f'<div class="v-pct" style="color:{color}">{r["confidence"]:.1%}</div></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        is_pos = r["label"] == 1
+        st.markdown(
+            f'<div class="verdict {"pos" if is_pos else "neg"}">'
+            f'<div class="v-emoji">{"😊" if is_pos else "😞"}</div>'
+            f'<div><div class="v-label">{"正面评价 POSITIVE" if is_pos else "负面评价 NEGATIVE"}</div>'
+            f'<div class="v-sub">模型:{predictor.run_name} · 置信度 {r["confidence"]:.1%}</div></div>'
+            f'<div class="v-pct">{r["confidence"]:.1%}</div></div>',
+            unsafe_allow_html=True,
+        )
 
-    # ---- 金色置信度进度条 + 双概率 ----
+    # ---- 金色置信度进度条 + 概率明细 ----
     st.markdown(
         f'<div class="conf-bar"><div class="conf-fill" style="width:{min(r["confidence"],1.0)*100:.1f}%"></div></div>',
         unsafe_allow_html=True,
     )
-    c1, c2 = st.columns(2)
-    c1.metric("负面概率", f"{r['probs']['负面']:.1%}")
-    c2.metric("正面概率", f"{r['probs']['正面']:.1%}")
+    if r.get("num_classes") == 5:
+        # 五级:五个等级概率一行展示
+        pcols = st.columns(5)
+        for i, ((name, emoji, color, _en), col) in enumerate(zip(LEVEL_STYLES, pcols)):
+            col.metric(f"{emoji} {name}", f"{r['probs'][name]:.1%}")
+    else:
+        c1, c2 = st.columns(2)
+        c1.metric("负面概率", f"{r['probs']['负面']:.1%}")
+        c2.metric("正面概率", f"{r['probs']['正面']:.1%}")
 
     # ---- 注意力关键词高亮(金色深浅 = 权重大小)----
     if r["attn_weights"] is not None:
@@ -319,7 +369,7 @@ def page_analyze():
 
 # ================== 页面 2:实验仪表盘 ==================
 def page_dashboard():
-    hero("实验仪表盘", "14 组对比实验全记录 · 训练曲线 / 混淆矩阵 / 超参数对比 / 模型结构")
+    hero("实验仪表盘", "二分类 14 组对比实验 + 五级分类拓展实验 · 训练曲线 / 混淆矩阵 / 超参数对比 / 模型结构")
 
     df = load_summary_csv()
 
@@ -339,8 +389,8 @@ def page_dashboard():
             unsafe_allow_html=True,
         )
 
-    tab_table, tab_curves, tab_attn, tab_model = st.tabs(
-        ["📊 超参对比总表", "📈 训练曲线与混淆矩阵", "🔥 注意力热力图", "🧠 模型结构"]
+    tab_table, tab_curves, tab_attn, tab_5c, tab_model = st.tabs(
+        ["📊 超参对比总表", "📈 训练曲线与混淆矩阵", "🔥 注意力热力图", "🌟 五级分类实验", "🧠 模型结构"]
     )
 
     # ---- Tab 1:对比总表 ----
@@ -383,7 +433,39 @@ def page_dashboard():
         else:
             st.info("暂无注意力热力图。")
 
-    # ---- Tab 4:模型结构说明 ----
+    # ---- Tab 4:五级分类拓展实验(独立于二分类 14 组)----
+    with tab_5c:
+        df5 = load_summary_csv_5class()
+        if df5 is not None and len(df5):
+            best5 = df5.loc[df5["test_macro_f1"].idxmax()]
+            b1, b2, b3 = st.columns(3)
+            b1.metric("🏆 最佳测试 macro-F1", f"{best5['test_macro_f1']:.4f}")
+            b2.metric("🎯 对应测试准确率", f"{best5['test_acc']:.4f}")
+            b3.metric("🧪 实验组数", f"{len(df5)} 组")
+            show5 = df5.copy()
+            show5.insert(0, "★", "")
+            show5.loc[df5["test_macro_f1"].idxmax(), "★"] = "🏆"
+            st.dataframe(show5, use_container_width=True, hide_index=True)
+            st.caption(
+                f"拓展任务:豆瓣电影短评(1-5 星 → 非常负面/负面/中性/正面/非常正面),"
+                f"数据 5 万条五类均衡;当前最佳:{best5['run_name']}。"
+                "细粒度星级分类难度显著高于二分类(相邻星级语义连续),macro-F1 偏低属正常现象。"
+            )
+            runs5 = sorted({p[:-len("_5c_curves.png")] for p in os.listdir(OUT_DIR)
+                            if p.endswith("_5c_curves.png")}) if os.path.isdir(OUT_DIR) else []
+            for run in runs5:
+                with st.expander(f"🌟 {run}", expanded=(run == runs5[0])):
+                    c1, c2 = st.columns(2)
+                    curves = os.path.join(OUT_DIR, f"{run}_5c_curves.png")
+                    conf = os.path.join(OUT_DIR, f"{run}_5c_confusion.png")
+                    if os.path.exists(curves):
+                        c1.image(curves, caption="训练/验证损失与 macro-F1 曲线")
+                    if os.path.exists(conf):
+                        c2.image(conf, caption="测试集 5×5 混淆矩阵")
+        else:
+            st.info("尚未运行五级分类实验(运行 src/train_5class.py 后此处展示结果)。")
+
+    # ---- Tab 5:模型结构说明 ----
     with tab_model:
         st.markdown(
             """
@@ -461,19 +543,33 @@ def page_batch():
         for r in rows
     ])
 
-    # ---- 统计概览 + 正负占比条 ----
-    n_pos = int((result["情感极性"] == "正面").sum())
-    n_neg = len(result) - n_pos
+    # ---- 统计概览 + 极性占比条(二分类两段条不变;五级为五段堆叠条)----
     st.markdown(f"<h3>📋 预测结果(共 {len(result)} 条)</h3>", unsafe_allow_html=True)
-    pct_pos = n_pos / len(result) * 100
-    pct_neg = 100 - pct_pos
-    st.markdown(
-        f'<div class="ratio-bar">'
-        f'<div class="ratio-pos" style="width:{pct_pos:.1f}%">😊 正面 {n_pos}({pct_pos:.0f}%)</div>'
-        f'<div class="ratio-neg" style="width:{pct_neg:.1f}%">😞 负面 {n_neg}({pct_neg:.0f}%)</div>'
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    is_5c = rows and rows[0].get("num_classes") == 5
+    if is_5c:
+        counts = {name: int((result["情感极性"] == name).sum()) for name, *_ in LEVEL_STYLES}
+        segs = "".join(
+            f'<div style="width:{counts[name] / len(result) * 100:.1f}%;'
+            f'background:{color};display:flex;align-items:center;justify-content:center;'
+            f'color:#0d1117;font-weight:800;font-size:12.5px" title="{name} {counts[name]} 条">'
+            f'{"%d" % round(counts[name] / len(result) * 100)}%</div>'
+            for name, _e, color, _en in LEVEL_STYLES
+        )
+        st.markdown(f'<div class="ratio-bar">{segs}</div>', unsafe_allow_html=True)
+        st.caption(" · ".join(
+            f"{name} {counts[name]}" for name, _e, _c, _en in LEVEL_STYLES))
+    else:
+        n_pos = int((result["情感极性"] == "正面").sum())
+        n_neg = len(result) - n_pos
+        pct_pos = n_pos / len(result) * 100
+        pct_neg = 100 - pct_pos
+        st.markdown(
+            f'<div class="ratio-bar">'
+            f'<div class="ratio-pos" style="width:{pct_pos:.1f}%">😊 正面 {n_pos}({pct_pos:.0f}%)</div>'
+            f'<div class="ratio-neg" style="width:{pct_neg:.1f}%">😞 负面 {n_neg}({pct_neg:.0f}%)</div>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
     st.dataframe(result, use_container_width=True, hide_index=True)
     st.download_button(
         "⬇️ 下载结果 CSV",
@@ -497,18 +593,35 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # 模型选择:默认 best_model.pt 对应 run(测试 F1 最高),可切换注意力模型
-    runs = list_model_runs()
-    default_run = None
-    best_log = os.path.join(OUT_DIR, "best_model_info.json")
-    if os.path.exists(best_log):
-        with open(best_log, encoding="utf-8") as f:
-            default_run = json.load(f).get("run_name")
+    # ---- 任务模式:二分类(默认,行为与原版完全一致)/ 五级分类 ----
+    task_mode = st.sidebar.radio("🎯 任务模式", ["二分类", "五级分类"],
+                                 index=0, help="五级分类为拓展任务(豆瓣 1-5 星 → 非常负面~非常正面)")
+    st.session_state["task_mode"] = task_mode
+
+    # ---- 模型选择:按任务模式列出对应 ckpt ----
+    if task_mode == "二分类":
+        runs = list_model_runs()
+        default_run = None
+        best_log = os.path.join(OUT_DIR, "best_model_info.json")
+        if os.path.exists(best_log):
+            with open(best_log, encoding="utf-8") as f:
+                default_run = json.load(f).get("run_name")
+    else:
+        runs = list_model_runs_5class()
+        # 五级默认:总表中 test_macro_f1 最高的 run
+        default_run = None
+        df5 = load_summary_csv_5class()
+        if df5 is not None and len(df5):
+            default_run = df5.loc[df5["test_macro_f1"].idxmax(), "run_name"]
     if default_run not in runs and runs:
         default_run = runs[0]
     selected_run = st.sidebar.selectbox(
-        "🧠 选择模型", runs, index=runs.index(default_run) if default_run in runs else 0
+        "🧠 选择模型", runs, index=runs.index(default_run) if default_run in runs else 0,
+        disabled=not runs,
     )
+    if not runs:
+        st.sidebar.warning("该模式下暂无模型检查点" +
+                           ("(请先运行 train_5class.py)" if task_mode == "五级分类" else ""))
     if selected_run:
         st.sidebar.caption(f"当前模型:{selected_run}")
     st.session_state["selected_run"] = selected_run  # 供各页面获取所选模型
