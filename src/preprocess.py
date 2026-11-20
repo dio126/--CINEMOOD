@@ -14,10 +14,10 @@
   5. 文本去重:同文本标签一致的只保留 1 条,标签冲突的整组丢弃(防测试集
      文本泄漏进训练集导致指标虚高),去重后合并数据按 8:1:1 重新划分
      训练/验证/测试(固定种子 42,可复现);
-  5. 词汇表【仅由训练集构建】—— 避免验证/测试集词泄漏到训练特征中(数据泄漏),
+  6. 词汇表【仅由训练集构建】—— 避免验证/测试集词泄漏到训练特征中(数据泄漏),
      上限 50000 词,特殊符号 <PAD>=0、<UNK>=1;
-  6. 文本转整数序列,padding / 截断至 maxlen=128;
-  7. 保存 data/processed/ 下 train/val/test 三个 .pkl(含 token id 序列、标签、原文)
+  7. 文本转整数序列,padding / 截断至 maxlen=128;
+  8. 保存 data/processed/ 下 train/val/test 三个 .pkl(含 token id 序列、标签、原文)
      与 vocab.json。
 
 推理(src/predict.py、app/)通过 import 本模块的 clean_text / tokenize /

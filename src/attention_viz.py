@@ -101,8 +101,11 @@ def run_attention_viz(run_name: str = None):
             )
             ax.set_xticklabels(tokens, rotation=90, fontsize=9)
             polarity = "正面" if label == 1 else "负面"
-            # Top 注意力词:过滤纯单字/虚词,挑权重最高的多字词,更有语义可读性
-            multi = [(w, wt) for w, wt in zip(tokens, weights) if len(w) >= 2]
+            # Top 注意力词:过滤纯单字与 <UNK> 占位词,挑权重最高的多字实词,更有语义可读性
+            multi = [
+                (w, wt) for w, wt in zip(tokens, weights)
+                if len(w) >= 2 and w not in ("<PAD>", "<UNK>")
+            ]
             top_words = [w for w, _ in sorted(multi, key=lambda x: -x[1])[:3]] or tokens[:3]
             ax.set_title(
                 f"样例{i}:真实 {polarity} | 预测 {'正面' if pred == 1 else '负面'} | "
