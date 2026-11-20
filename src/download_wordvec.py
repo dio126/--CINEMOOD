@@ -6,14 +6,17 @@
 保存到 data/processed/embedding_matrix.npy,并报告词表命中率。
 
 获取策略(总尝试时间预算 ≤ 10 分钟,逐级降级,如实记录最终来源):
-  1. 腾讯 AI Lab 200 维中文词向量(精简 small 版,tar.gz,流式解压读取);
-  2. fastText 官方中文 300 维词向量(cc.zh.300.vec.gz,Facebook AI,
-     同为公认中文预训练词向量,作为"腾讯源不可用"时的替代下载源);
-  3. 以上全部失败 → 用 gensim 在本语料上训练 word2vec 300 维替代
+  1. 腾讯 AI Lab 200 维中文词向量【精简 light 版】(HF 镜像托管的
+     light_Tencent_AILab_ChineseEmbedding.bin,143613 词 × 200 维,word2vec
+     二进制格式,流式解析;实测腾讯官网原版与 fastText 直连仅几十~百 KB/s,
+     1GB 级文件无法在预算内完成,故首选此镜像精简版);
+  2. 腾讯 AI Lab 官网 small 版 tar.gz(若网络允许);
+  3. fastText 官方中文 300 维词向量(cc.zh.300.vec.gz);
+  4. 以上全部失败 → 用 gensim 在本语料上训练 word2vec 300 维替代
      (若 gensim 不可用则报错退出,README 中如实注明替代原因)。
 
 说明:GitHub 上的 Chinese-Word-Vectors 仓库文件托管在百度网盘,无法脚本直连,
-     故以 fastText 官方直链作为第二候选,均失败才走本语料自训练。
+     故以 HF 镜像/官网/fastText 直链作为候选,均失败才走本语料自训练。
 
 流式读取:逐行解析词向量文本文件,只保留词汇表命中的词,内存占用小;
 未命中词随机初始化 N(0, 0.01);PAD 行置零,UNK 行随机初始化。
@@ -43,7 +46,17 @@ VOCAB_FILE = os.path.join(PROCESSED_DIR, "vocab.json")
 TIME_BUDGET_SECONDS = 10 * 60  # 总下载尝试时间预算:10 分钟
 
 # 候选下载源:(名称, URL, 格式)
+# 实测说明:腾讯官网源与 fastText 直连在本机网络下仅 23KB/s~185KB/s,
+# 881MB~1.3GB 无法在 10 分钟预算内完成;HF 镜像(hf-mirror.com)实测约 1MB/s,
+# 且其托管的 light_Tencent_AILab_ChineseEmbedding.bin(143613 词 × 200 维,116MB)
+# 正是"腾讯 AI Lab 200 维中文词向量的精简(light)版",故列为首选。
 CANDIDATES = [
+    (
+        "tencent_ailab_d200_light_hf",
+        "https://hf-mirror.com/shibing624/text2vec-word2vec-tencent-chinese/resolve/main/"
+        "light_Tencent_AILab_ChineseEmbedding.bin",
+        "w2v_bin",
+    ),
     (
         "tencent_ailab_d200_small",
         "https://ai.tencent.com/ailab/nlp/data/tencent-ailab-embedding-zh-d200-v0.1.0-s.txt.tar.gz",
@@ -90,6 +103,64 @@ def _iter_vector_lines_from_tar_gz(url: str):
                 yield word, vec
 
 
+def _iter_vectors_from_w2v_bin(url: str, deadline: float):
+    """流式解析 word2vec【二进制】格式(.bin):
+    头部为 "<词数> <维度>\\n",之后每条为 "词<空格><dim×4字节 float32>"。
+    采用 256KB 块缓冲读取,避免逐字节网络请求,内存占用小。
+    """
+    with _open_stream(url, timeout=120) as resp:
+        buf = b""
+        chunk_iter = iter(lambda: resp.read(256 * 1024), b"")
+
+        def _fill() -> bool:
+            nonlocal buf
+            nxt = next(chunk_iter, b"")
+            buf += nxt
+            return len(nxt) > 0
+
+        def _read_line() -> bytes:
+            nonlocal buf
+            while b"\n" not in buf:
+                if not _fill():
+                    raise ValueError("流意外结束(读头部时)")
+            line, buf2 = buf.split(b"\n", 1)
+            buf = buf2
+            return line
+
+        def _read_exact(n: int) -> bytes:
+            nonlocal buf
+            while len(buf) < n:
+                if not _fill():
+                    raise ValueError("流意外结束(读向量时)")
+            out, buf2 = buf[:n], buf[n:]
+            buf = buf2
+            return out
+
+        header = _read_line()
+        n_words, dim = map(int, header.split())
+        print(f"[wordvec] 二进制头: {n_words} 词 × {dim} 维")
+        for i in range(n_words):
+            if i % 20000 == 0:  # 进度提示(下载+解析约需几分钟)
+                if time.time() > deadline:
+                    raise TimeoutError("超过下载时间预算")
+                print(f"[wordvec] 已流式解析 {i}/{n_words} 词({time.time() % 100000:.0f}s)")
+            # 读词:UTF-8 字节直到空格(有的实现词前有换行,一并兼容)
+            word_bytes = b""
+            while True:
+                if not buf and not _fill():
+                    break
+                j = buf.find(b" ")
+                if j == -1:
+                    word_bytes += buf
+                    buf = b""
+                    continue
+                word_bytes += buf[:j]
+                buf = buf[j + 1:]
+                break
+            vec = np.frombuffer(_read_exact(dim * 4), dtype="<f4")
+            yield word_bytes.decode("utf-8", errors="ignore"), vec
+
+
 def try_download_and_extract(vocab: dict, deadline: float):
     """按候选顺序尝试下载预训练词向量,返回 (matrix, 来源名) 或 (None, None)。"""
     rng = np.random.default_rng(42)  # 未命中词的随机初始化也可复现
@@ -99,10 +170,12 @@ def try_download_and_extract(vocab: dict, deadline: float):
             return None, None
         try:
             print(f"[wordvec] 尝试下载: {name} ({url})")
-            iterator = (
-                _iter_vector_lines_from_tar_gz(url) if fmt == "tar_gz_txt"
-                else _iter_vector_lines_from_gz(url)
-            )
+            if fmt == "w2v_bin":
+                iterator = _iter_vectors_from_w2v_bin(url, deadline)
+            elif fmt == "tar_gz_txt":
+                iterator = _iter_vector_lines_from_tar_gz(url)
+            else:
+                iterator = _iter_vector_lines_from_gz(url)
             dim = None
             found = {}  # 词 → 向量(只保留词表命中的)
             for word, vec in iterator:
