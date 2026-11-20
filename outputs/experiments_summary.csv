@@ -1,0 +1,7 @@
+﻿run_name,model,embedding,lr,hidden,dropout,batch_size,best_val_acc,test_acc,test_precision,test_recall,test_f1,收敛epoch
+bilstm_lr1e-3_do0.5,bilstm,random,0.001,128,0.5,64,0.8898,0.8648,0.8688,0.8558,0.8623,7
+bilstm_lr1e-3_do0.3,bilstm,random,0.001,128,0.3,64,0.8787,0.8611,0.8623,0.8558,0.8590,2
+bilstm_lr5e-4_do0.3,bilstm,random,0.0005,128,0.3,64,0.8926,0.8565,0.8623,0.8446,0.8534,7
+bilstm_lr5e-4_do0.5,bilstm,random,0.0005,128,0.5,64,0.8861,0.8639,0.8617,0.8633,0.8625,6
+bilstm_lr1e-4_do0.3,bilstm,random,0.0001,128,0.3,64,0.8981,0.8639,0.8499,0.8801,0.8648,12
+bilstm_lr1e-4_do0.5,bilstm,random,0.0001,128,0.5,64,0.8889,0.8648,0.8553,0.8745,0.8648,12
