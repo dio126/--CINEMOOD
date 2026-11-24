@@ -1,3 +1,4 @@
 ﻿run_name,task,model_type,data_note,n,acc_or_exact,within1,f1,evaluated_at
 mixdom_bilstm_lr5e-4_do0.3_pretune,binary,lstm,ChnSentiCorp9060+DMSC电影4万混域,30000,0.8440,,0.8442,2026-11-24 11:27:48
 bert_roberta_wwm,binary,bert,ChnSentiCorp原9060(BERT同数据对比),30000,0.7779,,0.7716,2026-11-24 11:35:58
+bert_roberta_wwm_5c,5class,bert,DMSC原5万(BERT同数据对比),30000,0.5296,0.8963,0.5318,2026-11-24 11:50:00

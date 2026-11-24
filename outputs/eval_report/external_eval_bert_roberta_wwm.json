@@ -1,0 +1,46 @@
+{
+  "run_name": "bert_roberta_wwm",
+  "task": "binary",
+  "model_type": "bert",
+  "data_note": "ChnSentiCorp原9060(BERT同数据对比)",
+  "n": 30000,
+  "evaluated_at": "2026-11-24 11:35:58",
+  "n_posneg": 20000,
+  "accuracy": 0.7779,
+  "precision_pos": 0.7941363251481796,
+  "recall_pos": 0.7503,
+  "f1_pos": 0.7715960510078157,
+  "confusionMatrix_rownegcolpos": [
+    [
+      8055,
+      1945
+    ],
+    [
+      2497,
+      7503
+    ]
+  ],
+  "neutral_pred_pos_rate": 0.4469,
+  "by_group": {
+    "1": {
+      "n": 5000,
+      "pred_pos_rate": 0.1552
+    },
+    "2": {
+      "n": 5000,
+      "pred_pos_rate": 0.2338
+    },
+    "3": {
+      "n": 10000,
+      "pred_pos_rate": 0.4469
+    },
+    "4": {
+      "n": 5000,
+      "pred_pos_rate": 0.7088
+    },
+    "5": {
+      "n": 5000,
+      "pred_pos_rate": 0.7918
+    }
+  }
+}

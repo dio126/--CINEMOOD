@@ -15,3 +15,6 @@ __pycache__/
 # ===== 其他 =====
 .DS_Store
 Thumbs.db
+
+# ===== 方案A:BERT 本地权重(约400MB,git 忽略) =====
+models/

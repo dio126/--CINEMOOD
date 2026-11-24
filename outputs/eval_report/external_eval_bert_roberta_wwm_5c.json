@@ -1,0 +1,18 @@
+{
+  "run_name": "bert_roberta_wwm_5c",
+  "task": "5class",
+  "model_type": "bert",
+  "data_note": "DMSC原5万(BERT同数据对比)",
+  "n": 30000,
+  "evaluated_at": "2026-11-24 11:50:00",
+  "exact_accuracy": 0.5296333333333333,
+  "within1_accuracy": 0.8963333333333333,
+  "macro_f1": 0.5318333120072083,
+  "by_star_exact": {
+    "1": 0.651,
+    "2": 0.5046,
+    "3": 0.4477,
+    "4": 0.4534,
+    "5": 0.6734
+  }
+}
