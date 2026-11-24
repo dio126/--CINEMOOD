@@ -69,11 +69,14 @@ def set_seed(seed: int = SEED):
         torch.cuda.manual_seed_all(seed)
 
 
-def load_split(split: str, task: str):
-    """从既有 pkl 读 texts/labels(BERT 与 Bi-LSTM 用同一份划分,公平对比)。"""
+def load_split(split: str, task: str, data_suffix: str = ""):
+    """从既有 pkl 读 texts/labels(BERT 与 Bi-LSTM 用同一份划分,公平对比)。
+
+    后缀:二分类默认 ""(原 ChnSentiCorp)/可用 _mix(混域);五级默认 _5c。
+    """
     import pickle
 
-    suffix = "_5c" if task == "5class" else ""
+    suffix = data_suffix or ("_5c" if task == "5class" else "")
     path = os.path.join(PROCESSED_DIR, f"{split}{suffix}.pkl")
     with open(path, "rb") as f:
         d = pickle.load(f)
@@ -119,6 +122,8 @@ def main():
     parser.add_argument("--max_epochs", type=int, default=3)
     parser.add_argument("--patience", type=int, default=1)
     parser.add_argument("--no_fp16", action="store_true", help="禁用混合精度(OOM 排查用)")
+    parser.add_argument("--data_suffix", type=str, default="",
+                        help="数据 pkl 后缀(默认空=原任务数据;混域二分类传 _mix)")
     args = parser.parse_args()
 
     set_seed(SEED)
@@ -136,7 +141,7 @@ def main():
 
     loaders = {}
     for split in ("train", "val", "test"):
-        texts, labels = load_split(split, args.task)
+        texts, labels = load_split(split, args.task, args.data_suffix)
         ids = encode_texts(tokenizer, texts, args.maxlen)
         ds = TensorDataset(torch.from_numpy(ids), torch.from_numpy(labels))
         bs = args.batch_size if split == "train" else args.batch_size * 2
@@ -218,6 +223,7 @@ def main():
             "num_classes": num_classes, "maxlen": args.maxlen,
             "lr": args.lr, "batch_size": args.batch_size, "fp16": use_fp16,
             "weight_decay": 0.01, "task": args.task, "seed": SEED,
+            "data_suffix": args.data_suffix,  # 混域二分类为 _mix,默认空=原任务数据
         },
         f"best_val_{key}": best_val, "best_epoch": best_epoch,
     }

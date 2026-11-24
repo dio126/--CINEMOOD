@@ -8,6 +8,9 @@
 - 训练设备:本机 NVIDIA GeForce RTX 4060 Laptop GPU(CUDA 自动检测,无 GPU 自动回退 CPU)
 - **最佳模型:test_acc 0.8896 / test_F1 0.9022**(`outputs/best_model.pt`)
 - **拓展:五级分类**(豆瓣 1-5 星 → 非常负面~非常正面,最佳 macro-F1 0.4725,见第 7 章)
+- **模型改进(方案A/B,见第 8 章)**:新增 BERT(`hfl/chinese-roberta-wwm-ext` 微调,二分同域
+  test acc 0.9382、五级 exact 0.5464)+ 混域/扩数据 Bi-LSTM,外部 30000 基准跨域
+  67.8% → **89.3%**(混域 BERT),五级 exact 47.0% → **53.0%**(BERT)
 - 数据质量保障:语料按文本去重(消除训练/测试文本重叠导致的指标虚高);
   停用词表剔除否定词与程度副词 + 否定词合并 + OOV 组合式初始化,
   对"不满意/不好/不干净"等直接否定结构可稳定判负
@@ -276,4 +279,132 @@ $PY preprocess_5class.py    # 五级预处理 + 词表 + 词向量矩阵(复用�
 $PY train_5class.py --model bilstm --embedding pretrained_finetune --lr 5e-4 --hidden 256 \
     --run_name 5c_bilstm_pretune_h256          # 最佳一组;其余 3 组同理换参数
 # Web:streamlit 侧边栏"任务模式"切到"五级分类"即可交互体验
+```
+
+## 8. 模型改进(方案A:新增 BERT + 方案B:数据侧增强)
+
+本章为外部 30000 条基准诊断后的两项改进(全部实验真实训练产出,逐项记入
+`outputs/experiments_summary*.csv`;外部基准结果记入
+`outputs/eval_report/external_benchmark_summary.csv`;训练过程监控与干预见
+`outputs/train_interventions.md`)。**所有旧模型、旧实验产物零改动**,
+新模型以新增 ckpt 方式加入对比,Web 界面自动发现。
+
+### 8.1 动机:30000 条外部基准诊断(改进前基线)
+
+用完全未参与训练的 DMSC 剩余池 30000 条(三重排除、与训练集交集=0)对两个最佳模型
+做外部测评(详见 `outputs/eval_report/eval_report.md`),发现两个瓶颈:
+
+1. **二分类跨域掉分严重**:Bi-LSTM(`bilstm_lr5e-4_do0.3_pretune`,仅训练于
+   ChnSentiCorp 酒店/书/电脑评论)同域 test acc 0.8896,但在豆瓣电影评论上
+   仅 **0.6782**(F1 0.6964),降 21.1pp——训练域里根本没有电影评论的语言风格
+   (反语、行为暗示、口语缩写);
+2. **五级模型已到数据容量上限**:5 万条训练的 `5c_bilstm_pretune_h256` 在同分布
+   未见数据上 exact 0.4704,与自测集 0.4688 持平(零衰减)——不是过拟合,
+   而是 5 万样本下 Bi-LSTM 已学不动更多区分信号(2★/4★ 温和档位边界模糊)。
+
+### 8.2 做法
+
+**方案B1(混域二分类,治跨域)**:把电影域数据混进训练集。ChnSentiCorp 全量
+(去重后 9060)+ DMSC 剩余池抽电影二分类 4 万条(1★/2★=负面、4★/5★=正面,
+各星 1 万等比),合计 49060 条。剩余池做了**五重排除**:五级训练源 5 万、六个
+训练 pkl、**外部基准 30000 + 隐晦 300(禁入训的回归基准)**、以及(对 B2)
+B1 已抽样本;构建脚本内置交集=0 断言,并对最终 pkl 用 `dtype=str` 复核
+(train/val/test 与 30000 基准、隐晦 300 交集均为 0)。新词表(仅训练集构建)+
+腾讯词向量矩阵重建,训练与最佳二分类**完全同配置**的 Bi-LSTM
+(lr5e-4/do0.3/pretune/h128,run 名 `mixdom_bilstm_lr5e-4_do0.3_pretune`)。
+
+**方案A(新增 BERT,任务书 3.3 可选高级扩展)**:从 HF 镜像下载
+`hfl/chinese-roberta-wwm-ext`(约 400MB,本地 `models/bert-base/`,git 忽略),
+新增 `src/train_bert.py` + `src/models/bert.py`:maxlen128 / batch32 / fp16
+(RTX 4060 8GB 实测 3.3GB 显存)/ AdamW lr2e-5 / 线性衰减 6% warmup / 3 epoch
+早停。**与 Bi-LSTM 用同一份 pkl 划分、同一套评估函数**(evaluate_model /
+evaluate_5class),公平对比;二分类训练于 ChnSentiCorp 原数据
+(`bert_roberta_wwm`),五级训练于原 5 万(`bert_roberta_wwm_5c`)。
+ckpt config 记录 `model_type=bert` 与 tokenizer 目录,predict/evaluate 按
+config 自动走 BERT 分支(旧 Bi-LSTM 路径零改动);另加数据侧+模型侧组合的
+混域 BERT(`bert_roberta_wwm_mixdom`,用 B1 混域数据)。
+
+**方案B2(五级扩数据,破容量上限)**:DMSC 剩余池分层抽样 30 万(每级 6 万,
+长度 5~300,五重排除同上),训练与五级最佳**同配置**的 Bi-LSTM
+(bilstm/pretune/h256/do0.3;lr 取项目实际最佳 5e-4,即
+`experiments_summary_5class.csv` 中 5c 最佳组的真实配置;任务书原文写 1e-4
+与 CSV 记录不符,以真实最佳为准),run 名 `5c300k_bilstm_pretune_h256`。
+300k 训练实测 7.3 分钟(早停于第 5 epoch),未触发降级条款。
+
+### 8.3 总对比表(全部真实数字,外部基准=30000 条,口径与旧报告完全一致)
+
+二分类(同域 test=ChnSentiCorp 906 条;跨域=外部基准正/负组 20000 条):
+
+| 模型 | 训练数据 | 同域 test Acc / F1 | 跨域 Acc / F1 | 跨域较旧基线 |
+|---|---|---|---|---|
+| Bi-LSTM(旧最佳) | ChnSentiCorp 9060 | 0.8896 / 0.9022 | 0.6782 / 0.6964 | — |
+| **混域 Bi-LSTM(B1)** | 上述 + DMSC 电影 4 万 | 0.8388 / 0.8415*(混域测试集) | **0.8440 / 0.8442** | **+16.6pp** |
+| BERT(方案A,同数据) | ChnSentiCorp 9060 | **0.9382 / 0.9450** | 0.7779 / 0.7716 | +9.9pp |
+| 混域 BERT(A+B1 组合) | 上述 + DMSC 电影 4 万 | 0.8962 / 0.8976*(混域测试集) | **0.8928 / 0.8927** | **+21.5pp** |
+
+\* 混域模型的自测集是混域 8:1:1 的 test(4906 条,含约 18% ChnSentiCorp +
+82% 电影),与纯 ChnSentiCorp 测试集不可直接比,故同域列标注数据来源。
+
+五级分类(同分布 test 各 5000/30000 条;外部=30000 条全量):
+
+| 模型 | 训练数据 | 同分布 test exact / macro-F1 | 外部 exact / ±1 / macro-F1 |
+|---|---|---|---|
+| Bi-LSTM h256(旧最佳) | DMSC 5 万 | 0.4688 / 0.4725 | 0.4704 / 0.8580 / 0.4697 |
+| **30万 Bi-LSTM(B2)** | DMSC 30 万 | **0.5131 / 0.5145** | **0.5116 / 0.8816 / 0.5154** |
+| **BERT(方案A,同数据)** | DMSC 5 万 | **0.5464 / 0.5452** | **0.5296 / 0.8963 / 0.5318** |
+
+### 8.4 结论
+
+1. **B1 完全达成目标(67.8% → 75%+)**:仅靠把 4 万条电影评论混进训练集、
+   模型结构零改动,跨域 Acc 0.6782 → **0.8440**(+16.6pp)——证实跨域掉分的
+   主因是训练域覆盖不足,而非模型能力;
+2. **方案A 全面超越同数据 Bi-LSTM**:二分类同域 +4.9pp(0.9382 vs 0.8896)、
+   跨域 +9.9pp;五级同数据 exact +7.8pp(0.5464 vs 0.4688)——预训练语言模型
+   对"隐晦/反语"的鲁棒性显著更好,验证了第 7.5 节预判;
+3. **B2 破除了容量上限**:5 万 → 30 万,同配置 Bi-LSTM exact 0.4688 → 0.5131
+   (+4.3pp),外部 0.4704 → 0.5116,且 30 万下仍未过拟合(早停第 5 轮)——
+   旧"零衰减=容量上限"的诊断正确,数据规模是当时的实际瓶颈;
+4. **数据与模型改进可叠加**:混域 BERT 同时吃到两边收益,跨域 0.8928 为
+   全场最佳(+21.5pp);五级若做"30 万 + BERT"预计还能再涨(本轮时间预算内未做,属后续方向)。
+
+### 8.5 降级与失败记录(如实)
+
+- BERT 权重首次下载连接超时(hf-mirror 临时不可达),重试成功,未降级;
+- B2 词向量构建首次触发 `download_wordvec.py` 潜在 bug(组合式初始化假设
+  否定词必在词表,5cL 新词表无单字"别"→ KeyError),已加存在性守卫修复
+  (对旧词表计算路径无影响),重建成功;期间两个在线降级源一失败一超时,
+  最终主源磁盘缓存命中,无实质影响;
+- 混域 BERT 首次启动命令误传无效参数,立即终止修正后重启,无产物污染;
+- 无 OOM(fp16 下 BERT 峰值显存约 3.5GB/8GB)、无 NaN/Inf、无进程假死,
+  全部干预明细见 `outputs/train_interventions.md`。
+
+### 8.6 复现命令
+
+```bash
+PY=.venv/Scripts/python.exe
+# 方案A 前置:下载 BERT 本地权重(HF 镜像;已入 .gitignore)
+HF_ENDPOINT=https://hf-mirror.com $PY -c "from huggingface_hub import snapshot_download; \
+  snapshot_download('hfl/chinese-roberta-wwm-ext', local_dir='models/bert-base', \
+  allow_patterns=['config.json','vocab.txt','tokenizer_config.json','tokenizer.json','pytorch_model.bin'])"
+cd src
+# 方案B1:混域数据 + 同配置 Bi-LSTM + 外部基准评估
+$PY preprocess_mixed.py
+$PY train.py --model bilstm --embedding pretrained_finetune --lr 5e-4 --hidden 128 --dropout 0.3 \
+    --run_name mixdom_bilstm_lr5e-4_do0.3_pretune \
+    --data_suffix _mix --vocab_file data/processed/vocab_mixed.json \
+    --embedding_matrix data/processed/embedding_matrix_mixed.npy
+# 方案A:BERT 二分类 / 五级 / 混域(同数据同口径)
+$PY train_bert.py --task binary --run_name bert_roberta_wwm
+$PY train_bert.py --task 5class --run_name bert_roberta_wwm_5c
+$PY train_bert.py --task binary --run_name bert_roberta_wwm_mixdom --data_suffix _mix
+# 方案B2:30万五级 + 同配置训练
+$PY preprocess_5class_large.py
+$PY train_5class.py --model bilstm --embedding pretrained_finetune --lr 5e-4 --hidden 256 --dropout 0.3 \
+    --run_name 5c300k_bilstm_pretune_h256 \
+    --data_suffix _5cL --vocab_file data/processed/vocab_5class_large.json \
+    --embedding_matrix data/processed/embedding_matrix_5class_large.npy
+# 外部 30000 基准评估(任意新模型;不改动旧报告产物)
+$PY eval_external.py eval_one --bin_run mixdom_bilstm_lr5e-4_do0.3_pretune --data_note "混域"
+$PY eval_external.py eval_one --five_run bert_roberta_wwm_5c --data_note "BERT同数据"
+# Web 界面零改动:新 ckpt 按现有命名约定(<run>_best.pt / <run>_5c_best.pt)自动发现
 ```

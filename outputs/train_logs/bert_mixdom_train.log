@@ -1,0 +1,28 @@
+[bert] 设备 cuda,fp16=True,种子 42
+[bert] train: 39248 条 → 1227 批
+[bert] val: 4906 条 → 77 批
+[bert] test: 4906 条 → 77 批
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 47646.22it/s]
+[transformers] [1mBertForSequenceClassification LOAD REPORT[0m from: D:\作业\机器学习实践\movie-sentiment\models/bert-base
+Key                                        | Status     | 
+-------------------------------------------+------------+-
+cls.predictions.transform.dense.weight     | UNEXPECTED | 
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED | 
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED | 
+cls.predictions.bias                       | UNEXPECTED | 
+cls.seq_relationship.weight                | UNEXPECTED | 
+cls.seq_relationship.bias                  | UNEXPECTED | 
+cls.predictions.decoder.weight             | UNEXPECTED | 
+cls.predictions.transform.dense.bias       | UNEXPECTED | 
+classifier.bias                            | MISSING    | 
+classifier.weight                          | MISSING    | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+- MISSING:	those params were newly initialized because missing from the checkpoint. Consider training on your downstream task.
+[bert] epoch 01/3 loss=0.3403 train_acc=0.8448 val_loss=0.2683 val_acc=0.8899 (215s)
+[bert] epoch 02/3 loss=0.1851 train_acc=0.9286 val_loss=0.2574 val_acc=0.9022 (424s)
+[bert] epoch 03/3 loss=0.0989 train_acc=0.9661 val_loss=0.3070 val_acc=0.8989 (640s)
+[bert] 早停触发:验证 acc 已 1 轮未提升
+[bert] 完成 bert_roberta_wwm_mixdom: best_val_acc=0.9022 → D:\作业\机器学习实践\movie-sentiment\outputs\experiments_summary.csv
+EXIT=0

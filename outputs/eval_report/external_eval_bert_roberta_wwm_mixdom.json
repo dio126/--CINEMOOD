@@ -1,0 +1,46 @@
+{
+  "run_name": "bert_roberta_wwm_mixdom",
+  "task": "binary",
+  "model_type": "bert",
+  "data_note": "ChnSentiCorp9060+DMSC电影4万混域(BERT)",
+  "n": 30000,
+  "evaluated_at": "2026-11-24 12:09:54",
+  "n_posneg": 20000,
+  "accuracy": 0.89275,
+  "precision_pos": 0.893261239611495,
+  "recall_pos": 0.8921,
+  "f1_pos": 0.8926802421574023,
+  "confusionMatrix_rownegcolpos": [
+    [
+      8934,
+      1066
+    ],
+    [
+      1079,
+      8921
+    ]
+  ],
+  "neutral_pred_pos_rate": 0.4993,
+  "by_group": {
+    "1": {
+      "n": 5000,
+      "pred_pos_rate": 0.0716
+    },
+    "2": {
+      "n": 5000,
+      "pred_pos_rate": 0.1416
+    },
+    "3": {
+      "n": 10000,
+      "pred_pos_rate": 0.4993
+    },
+    "4": {
+      "n": 5000,
+      "pred_pos_rate": 0.8524
+    },
+    "5": {
+      "n": 5000,
+      "pred_pos_rate": 0.9318
+    }
+  }
+}

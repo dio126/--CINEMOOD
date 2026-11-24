@@ -152,10 +152,33 @@ def run_evaluate(run_name: str):
     from dataset import SentimentDataset
 
     model, ckpt, _vocab, device = load_checkpoint_for_eval(run_name)
-    # 数据后缀:ckpt 显式记录(方案B1 混域 _mix)则用之,旧 ckpt 无该键=原行为
-    suffix = ckpt["config"].get("data_suffix", "")
-    test_ds = SentimentDataset("test", suffix=suffix)
-    loader = DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
+    cfg = ckpt["config"]
+    if cfg.get("model_type") == "bert":
+        # BERT:测试集需按 tokenizer 重编码(不能用 word-id pkl 直接当 input_ids)
+        import pickle
+
+        from models.bert import resolve_bert_dir
+        from train_bert import encode_texts
+
+        suffix = cfg.get("data_suffix") or ("_5c" if cfg.get("num_classes", 2) == 5 else "")
+        from transformers import AutoTokenizer
+
+        tok = AutoTokenizer.from_pretrained(
+            resolve_bert_dir(cfg.get("model_path")), local_files_only=True)
+        with open(os.path.join(os.path.dirname(OUT_DIR), "data", "processed",
+                               f"test{suffix}.pkl"), "rb") as f:
+            d = pickle.load(f)
+        ids = encode_texts(tok, [str(t) for t in d["texts"]], cfg.get("maxlen", 128))
+        labels = np.asarray(d["labels"]).astype(np.int64)
+        from torch.utils.data import TensorDataset
+
+        loader = DataLoader(TensorDataset(torch.from_numpy(ids), torch.from_numpy(labels)),
+                            batch_size=128, shuffle=False, num_workers=0)
+    else:
+        # 数据后缀:ckpt 显式记录(方案B1 混域 _mix)则用之,旧 ckpt 无该键=原行为
+        suffix = cfg.get("data_suffix", "")
+        test_ds = SentimentDataset("test", suffix=suffix)
+        loader = DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
 
     metrics, preds, labels = evaluate_model(model, loader, device)
     metrics_json = os.path.join(OUT_DIR, f"{run_name}_metrics.json")
