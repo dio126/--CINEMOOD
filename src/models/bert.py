@@ -41,6 +41,12 @@ class BertClassifier(nn.Module):
         super().__init__()
         from transformers import AutoModelForSequenceClassification
 
+        # 展示层微调(仅日志级别,不改任何加载/推理逻辑):在 transformers 导入之后设置,
+        # 才不会被其默认配置覆盖;压掉 LOAD REPORT MISSING/UNEXPECTED 等吓人的 WARNING 噪音
+        import logging
+
+        logging.getLogger("transformers").setLevel(logging.ERROR)
+
         path = resolve_bert_dir(model_path)
         self.bert = AutoModelForSequenceClassification.from_pretrained(
             path, num_labels=num_classes, local_files_only=True)

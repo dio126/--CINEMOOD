@@ -8,6 +8,7 @@ Editorial Intelligence 视觉系统：暖白纸张质感、墨绿主色、陶土
 标题使用现代中文黑体，关键词以衬线体强调；正文保持高可读性的系统字体。
 
 仅做视觉与导航层，推理逻辑完全不变：src/predict.py → 共用 src/preprocess.py。
+导航经 query 参数 ?page= &theme= &task= 路由(task 随链接携带,跨页保持任务模式)。
 启动：.venv/Scripts/python.exe -m streamlit run app/app.py --server.headless true
 """
 
@@ -652,15 +653,20 @@ NAV_ITEMS = [
 
 
 def top_nav(active_key: str, theme_id: str):
-    """悬浮导航：品牌、页面入口、浅色主题与当前任务模式。"""
+    """悬浮导航：品牌、页面入口、浅色主题与当前任务模式。
+
+    所有链接携带 ?task=(binary|five):整页跳转后 main() 会按参数恢复任务模式,
+    会话不因页面切换而丢失(批量页与单句分析共用同一套模型配置)。
+    """
+    task = "five" if st.session_state.get("task_mode", "二分类") == "五级分类" else "binary"
     pills = "".join(
         f'<a class="navpill{" active" if key == active_key else ""}" '
-        f'href="?page={key}&theme={theme_id}" target="_self">{label}</a>'
+        f'href="?page={key}&theme={theme_id}&task={task}" target="_self">{label}</a>'
         for key, label, _icon in NAV_ITEMS
     )
     dots = "".join(
         f'<a class="theme-dot{" active" if tid == theme_id else ""}" '
-        f'href="?page={active_key}&theme={tid}" target="_self" '
+        f'href="?page={active_key}&theme={tid}&task={task}" target="_self" '
         f'title="{t["label"]}" aria-label="{t["label"]}" '
         f'style="background:linear-gradient(135deg,{t["p"]},{t["c"]})"></a>'
         for tid, t in THEMES.items()
@@ -668,7 +674,7 @@ def top_nav(active_key: str, theme_id: str):
     mode = st.session_state.get("task_mode", "二分类")
     st.markdown(
         f'<nav class="topnav">'
-        f'<a class="brand" href="?page=analyze&theme={theme_id}" target="_self" aria-label="CINEMOOD 首页">'
+        f'<a class="brand" href="?page=analyze&theme={theme_id}&task={task}" target="_self" aria-label="CINEMOOD 首页">'
         f'<span class="brand-mark">CM</span>'
         f'<span class="brand-txt">CINEMOOD<small>情绪放映室 · NLP LAB</small></span></a>'
         f'<div class="navpills">{pills}</div>'
@@ -733,12 +739,35 @@ def list_model_runs_5class():
     )
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner=False, max_entries=4)
 def get_predictor(run_name: str = None):
-    """加载推理器(带缓存;predict.py 按 ckpt 自动识别二分类/五级)。"""
+    """加载推理器(LRU 上限 4 个:逐个切换模型不会把全部 23 个检查点驻留内存,
+    约 1.2GB 的 BERT 权重也会被及时淘汰;cache key 是 run 名,不影响当前使用)。
+    predict.py 按 ckpt 自动识别二分类/五级,推理逻辑不变。"""
     from predict import SentimentPredictor
 
     return SentimentPredictor(run_name)
+
+
+# 与 get_predictor 的 LRU(max_entries=4)同步维护的"最近已加载"访问序(进程内),
+# 作为轻量探测:不在其中 = 冷加载,需要 spinner 反馈;命中则瞬时返回、零打扰。
+_RECENTLY_LOADED: list = []
+
+
+def load_predictor(run_name: str):
+    """取当前模型:冷加载时显示含模型名的 spinner(BERT 附"约 10 秒"提示),缓存命中无感。"""
+    cold = run_name not in _RECENTLY_LOADED
+    if cold:
+        hint = "(BERT 首次加载约 10 秒,请稍候)" if "bert" in str(run_name).lower() else ""
+        with st.spinner(f"正在加载模型 {run_name}{hint} …"):
+            predictor = get_predictor(run_name)
+    else:
+        predictor = get_predictor(run_name)
+    if run_name in _RECENTLY_LOADED:
+        _RECENTLY_LOADED.remove(run_name)
+    _RECENTLY_LOADED.insert(0, run_name)
+    del _RECENTLY_LOADED[4:]  # 与 cache_resource 的 max_entries 对齐(镜像其淘汰顺序)
+    return predictor
 
 
 @st.cache_data
@@ -754,6 +783,11 @@ def load_summary_csv_5class():
     return pd.read_csv(path, encoding="utf-8-sig") if os.path.exists(path) else None
 
 
+def metric_available(df) -> bool:
+    """指标总表是否可用来决定默认模型(CSV 缺失时才回退 best_model_info.json)。"""
+    return df is not None and len(df) > 0 and "run_name" in df.columns
+
+
 # 五级分类的等级样式：类名、表情、浅底可读色、柔和底色、英文标注。
 LEVEL_STYLES = [
     ("非常负面", "😡", "#AD4F45", "rgba(173,79,69,.09)", "VERY NEGATIVE"),
@@ -767,13 +801,37 @@ BIN_STYLES = {
     0: ("负面", "😞", "#B96747", "rgba(185,103,71,.09)", "NEGATIVE"),
 }
 
-# 快速示例：点击即填入输入框，session key 与 text_area 绑定。
+# 快速示例:经 on_click 回调直接写入 text_area 的 widget key。
+# 回调在 rerun 前执行、widget key 状态优先于 value 参数,示例文本在"开始分析"
+# 等后续任意 rerun 中都稳定保留(修复旧版 session_state.pop 导致的回滚)。
 EXAMPLES = {
     "正面示例": "这家酒店位置很好,房间干净整洁,服务态度也特别热情,下次还会再来!",
     "负面示例": "我不满意这家酒店的服务,房间也不干净,隔音差到一夜没睡好。",
     "电影评论": "这部电影太精彩了,剧情紧凑不拖沓,演员演技在线,强烈推荐!",
     "否定句测试": "总体不满意,不会再来。性价比也不高,感觉被骗了。",
 }
+
+
+def _fill_example(sample: str):
+    """示例按钮回调:填入示例文本,并让旧结论卡失效(输入变了,旧结论不再成立)。"""
+    st.session_state["review_text"] = sample
+    st.session_state.pop("analyze_result", None)
+
+
+def _invalidate_result():
+    """模型下拉变化回调:结论卡对应的模型已切换,立即失效。"""
+    st.session_state.pop("analyze_result", None)
+
+
+def _has_valid_tokens(text: str) -> bool:
+    """空/纯符号输入防呆:经项目统一 tokenize(与训练同路径)后无有效词语则不进模型,
+    避免给出随机极性。分析页 warning 提示,批量页跳过该行并标注"无法判断"。"""
+    try:
+        from preprocess import tokenize
+
+        return len(tokenize(text)) > 0
+    except Exception:  # noqa: BLE001 — 检查自身失败时不拦截,回到原推理路径
+        return True
 
 
 def _theme_c_rgb(theme_id: str) -> str:
@@ -783,50 +841,100 @@ def _theme_c_rgb(theme_id: str) -> str:
 
 
 # ================== 控制台(任务模式 + 模型选择,融入页面) ==================
+def _switch_task_mode(mode: str):
+    """切换任务模式:同步 session 与 query 参数(?task=,导航链接携带),并清掉旧结论。"""
+    st.session_state["task_mode"] = mode
+    st.session_state.pop("analyze_result", None)
+    st.query_params["task"] = "five" if mode == "五级分类" else "binary"
+    st.rerun()
+
+
+# 弱基线(run 名)启发式:不含这些标记的 run 视为随机词向量基线实验。
+# CSV 有 embedding 列时以 embedding=random 为准,此规则仅作表缺失/缺行时的回退。
+_STRONG_RUN_MARKS = ("pretrained", "pretune", "bert", "mixdom", "5c300k")
+
+
+def _rank_and_annotate(runs: list, df, metric_col: str, five: bool):
+    """模型下拉的排序与显示名:按指标降序(最佳在最上),并加推荐/耗时/基线标注。
+
+    返回 (排序后的 run 列表, 显示名映射)。标注只影响显示,selectbox 提交值
+    仍是原始 run 名(Web 自动发现与 CLI 的 run 名不变)。
+    """
+    metric, emb = {}, {}
+    if df is not None and len(df):
+        if metric_col in df.columns:
+            metric = dict(zip(df["run_name"].astype(str), df[metric_col]))
+        if "embedding" in df.columns:
+            emb = dict(zip(df["run_name"].astype(str), df["embedding"].astype(str)))
+    ranked = sorted(runs, key=lambda r: (-(metric.get(r, float("-inf"))), r))  # 缺指标者排后
+
+    names = {}
+    for i, run in enumerate(ranked):
+        label = f"★ 推荐 · {run}" if (i == 0 and metric and metric.get(run) is not None) else run
+        is_bert = emb.get(run) == "bert" or "bert" in run.lower()
+        if is_bert:
+            label += "(首次加载约10秒)"
+        if five:
+            # 五级:random 基线与 5 万条旧模型都标基线;5c300k 扩数据版与 BERT 不标
+            is_baseline = not is_bert and not run.startswith("5c300k")
+        elif run in emb:
+            is_baseline = emb[run] == "random"  # 二分:随机词向量弱基线
+        else:
+            is_baseline = not any(m in run for m in _STRONG_RUN_MARKS)
+        if is_baseline:
+            label += "(基线实验)"
+        names[run] = label
+    return ranked, names
+
+
 def render_control():
     """任务模式分段与模型选择。"""
     cur_mode = st.session_state.get("task_mode", "二分类")
 
     st.markdown('<div class="control-label">01 · 任务模式</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    if c1.button("二元情感", type="primary" if cur_mode == "二分类" else "secondary",
-                 use_container_width=True):
+    if c1.button("二元情感", key="mode_binary",
+                 type="primary" if cur_mode == "二分类" else "secondary", width="stretch"):
         if cur_mode != "二分类":
-            st.session_state["task_mode"] = "二分类"
-            st.rerun()
-    if c2.button("五级情感", type="primary" if cur_mode == "五级分类" else "secondary",
-                 use_container_width=True, help="拓展任务：豆瓣 1–5 星 → 非常负面至非常正面"):
+            _switch_task_mode("二分类")
+    if c2.button("五级情感", key="mode_five",
+                 type="primary" if cur_mode == "五级分类" else "secondary", width="stretch",
+                 help="拓展任务：豆瓣 1–5 星 → 非常负面至非常正面"):
         if cur_mode != "五级分类":
-            st.session_state["task_mode"] = "五级分类"
-            st.rerun()
+            _switch_task_mode("五级分类")
     cur_mode = st.session_state.get("task_mode", "二分类")
 
     if cur_mode == "二分类":
+        # 默认=指标总表 test_f1 最大者(与仪表盘同口径);best_model_info.json 仅作 CSV 缺失时的回退
         runs = list_model_runs()
-        default_run = None
-        best_log = os.path.join(OUT_DIR, "best_model_info.json")
-        if os.path.exists(best_log):
-            with open(best_log, encoding="utf-8") as f:
-                default_run = json.load(f).get("run_name")
+        df_metric = load_summary_csv()
+        ranked, names = _rank_and_annotate(runs, df_metric, "test_f1", five=False)
+        default_run = ranked[0] if ranked else None
+        if not metric_available(df_metric):
+            best_log = os.path.join(OUT_DIR, "best_model_info.json")
+            if os.path.exists(best_log):
+                with open(best_log, encoding="utf-8") as f:
+                    fallback = json.load(f).get("run_name")
+                if fallback in runs:
+                    default_run = fallback
     else:
         runs = list_model_runs_5class()
-        default_run = None
         df5 = load_summary_csv_5class()
-        if df5 is not None and len(df5):
-            default_run = df5.loc[df5["test_macro_f1"].idxmax(), "run_name"]
-    if default_run not in runs and runs:
-        default_run = runs[0]
+        ranked, names = _rank_and_annotate(runs, df5, "test_macro_f1", five=True)
+        default_run = ranked[0] if ranked else None
 
     st.markdown('<div class="control-label" style="margin-top:15px">02 · 预测模型</div>',
                 unsafe_allow_html=True)
     selected_run = st.selectbox(
-        "模型", runs, index=runs.index(default_run) if default_run in runs else 0,
+        "模型", ranked, index=ranked.index(default_run) if default_run in ranked else 0,
+        format_func=lambda r: names.get(r, r),  # 显示名带标注,提交值仍是原始 run 名
         disabled=not runs, label_visibility="collapsed",
+        on_change=_invalidate_result,  # 换模型即让旧结论卡失效
     )
     if not runs:
         st.warning("该模式下暂无模型检查点" +
                    ("（请先运行 train_5class.py）" if cur_mode == "五级分类" else ""))
-    if selected_run:
+    else:
         st.markdown(
             f'<div class="model-chip"><span class="dot"></span>'
             f'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
@@ -859,19 +967,22 @@ def page_analyze(theme_id: str):
             )
             cols = st.columns(len(EXAMPLES))
             for col, (name, sample) in zip(cols, EXAMPLES.items()):
-                if col.button(name, use_container_width=True):
-                    st.session_state["review_input"] = sample
+                col.button(name, key=f"ex_{name}", on_click=_fill_example, args=(sample,),
+                           width="stretch")
+            # 固定 key 的 text_area:示例经 on_click 回调写入 widget 状态,
+            # 点"开始分析"触发的 rerun 不会把输入框回滚成默认文本。
+            st.session_state.setdefault(
+                "review_text",
+                "这家酒店位置很好,房间干净整洁,服务态度也特别热情,下次还会再来!",
+            )
             text = st.text_area(
                 "请输入中文评论",
-                value=st.session_state.pop(
-                    "review_input",
-                    "这家酒店位置很好,房间干净整洁,服务态度也特别热情,下次还会再来!",
-                ),
+                key="review_text",
                 height=140,
                 label_visibility="collapsed",
                 placeholder="在这里输入评论，模型将分析它的情感倾向……",
             )
-            analyze = st.button("开始分析  →", type="primary", use_container_width=True)
+            analyze = st.button("开始分析  →", key="btn_analyze", type="primary", width="stretch")
     with c_deck:
         with st.container(border=True):
             st.markdown(
@@ -883,23 +994,42 @@ def page_analyze(theme_id: str):
             )
             render_control()
 
-    # 预加载当前选中模型：进入页面/切换模型时即完成加载（cache_resource 缓存，
-    # 重复渲染零开销），点击"开始分析"后只剩纯推理，显著缩短可感知耗时。
-    predictor = get_predictor(st.session_state.get("selected_run"))
+    # 预加载当前选中模型:冷加载(BERT 约 10 秒)有含模型名的 spinner 反馈,
+    # 缓存命中零打扰;点击"开始分析"后只剩纯推理,显著缩短可感知耗时。
+    predictor = load_predictor(st.session_state.get("selected_run"))
 
-    if not analyze:
-        page_footer()
-        return
+    if analyze:
+        # 新一次点击先让旧结论失效:输入为空/无有效词语时也不残留上一轮结果卡
+        st.session_state.pop("analyze_result", None)
+        clicked = (text or "").strip()
+        if not clicked:
+            st.warning("请输入评论内容")
+        elif not _has_valid_tokens(clicked):
+            st.warning("输入未包含可分析的有效词语,无法判断")
+        else:
+            with st.spinner("模型推理中…"):
+                r = predictor.predict(clicked)
+            # 结果写入 session 并绑定产生它的模式与模型,供下方严格路径渲染
+            st.session_state["analyze_result"] = {
+                "r": r,
+                "run": predictor.run_name,
+                "mode": st.session_state.get("task_mode", "二分类"),
+            }
 
-    text = text.strip()
-    if not text:
-        st.warning("请输入评论内容")
-        page_footer()
-        return
+    # 严格路径:结论只在"确属当前任务模式 + 当前模型"时渲染;
+    # 切模式/换模型(回调已清)后页面立即回到纯输入态,不再残留旧结果卡。
+    res = st.session_state.get("analyze_result")
+    if res is not None:
+        if (res["mode"] == st.session_state.get("task_mode", "二分类")
+                and res["run"] == st.session_state.get("selected_run")):
+            _render_analysis(predictor, res["r"], theme_id)
+        else:
+            st.session_state.pop("analyze_result", None)
+    page_footer()
 
-    with st.spinner("模型推理中…"):
-        r = predictor.predict(text)
 
+def _render_analysis(predictor, r: dict, theme_id: str):
+    """渲染一次成功预测:结论卡、置信度、概率明细与注意力高亮。"""
     # ---- 结论卡：情绪颜色只承担语义，不使用发光效果 ----
     if r.get("num_classes") == 5:
         name, emoji, color, glow, en = LEVEL_STYLES[r["label"]]
@@ -953,21 +1083,33 @@ def page_analyze(theme_id: str):
                 f'<div style="margin-top:10px;color:var(--ink-3);font-size:11.5px">注意力最高的词：{chips}</div>',
                 unsafe_allow_html=True,
             )
+    elif predictor.is_bert:
+        # BERT(含五级)走分类头,无词级注意力权重 —— 与"无注意力层的 Bi-LSTM"区分开
+        st.info("当前加载的是 BERT 模型,不提供词级注意力高亮。可在模型控制台选择 Bi-LSTM+Attention 模型以获得关键词高亮。")
     else:
         st.info("当前加载的是基础 Bi-LSTM 模型(无注意力层)。可在模型控制台选择 Bi-LSTM+Attention 模型以获得关键词高亮。")
-    page_footer()
 
 
 # ================== 页面 2:实验仪表盘 ==================
 def page_dashboard(theme_id: str):
+    df = load_summary_csv()
+    df5 = load_summary_csv_5class()
+    n_bin = len(df) if df is not None else 0
+    n_5c = len(df5) if df5 is not None else 0
+    if n_bin:  # 实验组数随指标总表动态生成,不再写死
+        title_html = f"{n_bin} 组实验的<em>全景</em>"
+        sub = (f"二分类 {n_bin} 组对比实验"
+               + (f"与五级分类 {n_5c} 组拓展实验" if n_5c else "与五级分类拓展实验")
+               + "，集中呈现训练曲线、混淆矩阵、超参数与模型结构。")
+    else:
+        title_html = "全部实验的<em>全景</em>"
+        sub = "二分类对比实验与五级分类拓展实验，集中呈现训练曲线、混淆矩阵、超参数与模型结构。"
     hero_block(
         "dashboard", theme_id,
-        "十四组实验的<em>全景</em>",
-        "二分类 14 组对比实验与五级分类拓展实验，集中呈现训练曲线、混淆矩阵、超参数与模型结构。",
+        title_html,
+        sub,
         "EXPERIMENT ARCHIVE · EVIDENCE",
     )
-
-    df = load_summary_csv()
 
     # ---- 顶部指标 Bento 卡 ----
     if df is not None and len(df):
@@ -997,7 +1139,7 @@ def page_dashboard(theme_id: str):
             show = df.copy()
             show.insert(0, "★", "")  # 最佳行打星标记
             show.loc[df["test_f1"].idxmax(), "★"] = "★"
-            st.dataframe(show, use_container_width=True, hide_index=True, height=420)
+            st.dataframe(show, width="stretch", hide_index=True, height=420)
             st.caption("★ 列为测试 F1 最高的一组;完整数据见 outputs/experiments_summary.csv")
         else:
             st.warning("尚未找到 outputs/experiments_summary.csv,请先完成训练实验。")
@@ -1043,7 +1185,7 @@ def page_dashboard(theme_id: str):
             show5 = df5.copy()
             show5.insert(0, "★", "")
             show5.loc[df5["test_macro_f1"].idxmax(), "★"] = "★"
-            st.dataframe(show5, use_container_width=True, hide_index=True)
+            st.dataframe(show5, width="stretch", hide_index=True)
             st.caption(
                 f"拓展任务:豆瓣电影短评(1-5 星 → 非常负面/负面/中性/正面/非常正面),"
                 f"数据 5 万条五类均衡;当前最佳:{best5['run_name']}。"
@@ -1124,7 +1266,7 @@ def page_batch(theme_id: str):
                 unsafe_allow_html=True,
             )
 
-    predictor = get_predictor(st.session_state.get("selected_run"))
+    predictor = load_predictor(st.session_state.get("selected_run"))
     texts = []
 
     left, right = st.columns(2, gap="large")
@@ -1163,7 +1305,7 @@ def page_batch(theme_id: str):
                 height=150,
                 label_visibility="collapsed",
             )
-            run_batch = st.button("开始批量预测  →", type="primary", use_container_width=True)
+            run_batch = st.button("开始批量预测  →", type="primary", width="stretch")
 
     if run_batch and pasted.strip():
         texts += [line.strip() for line in pasted.splitlines() if line.strip()]
@@ -1174,34 +1316,43 @@ def page_batch(theme_id: str):
         return
 
     with st.spinner("批量推理中…"):
-        rows = [predictor.predict(t) | {"text": t[:200]} for t in texts]
+        rows = []
+        for t in texts:
+            if _has_valid_tokens(t):
+                rows.append(predictor.predict(t) | {"text": t[:200]})
+            else:  # 空/纯符号行不进模型,结果表标注"无法判断"
+                rows.append({"text": t[:200], "polarity": "无法判断",
+                             "confidence": None, "num_classes": predictor.num_classes})
     result = pd.DataFrame([
-        {"text": r["text"], "情感极性": r["polarity"], "置信度": f"{r['confidence']:.1%}"}
+        {"text": r["text"], "情感极性": r["polarity"],
+         "置信度": "—" if r.get("confidence") is None else f"{r['confidence']:.1%}"}
         for r in rows
     ])
 
-    # ---- 统计概览 + 极性占比条(二分类两段;五级五段) ----
+    # ---- 统计概览 + 极性占比条(二分类两段;五级五段;占比仅统计可判断的行) ----
     st.markdown(
         '<div class="card-heading" style="margin:28px 0 12px"><span class="card-number">04</span><div>'
         '<div class="bento-title">预测结果</div>'
         '<div class="bento-hint">共 %d 条评论 · 情感分布与逐条明细</div></div></div>' % len(result),
         unsafe_allow_html=True,
     )
-    is_5c = rows and rows[0].get("num_classes") == 5
-    if is_5c:
-        counts = {name: int((result["情感极性"] == name).sum()) for name, *_ in LEVEL_STYLES}
+    valid = result[result["情感极性"] != "无法判断"]
+    n_invalid = len(result) - len(valid)
+    is_5c = predictor.num_classes == 5
+    if len(valid) and is_5c:
+        counts = {name: int((valid["情感极性"] == name).sum()) for name, *_ in LEVEL_STYLES}
         segs = "".join(
-            f'<div class="ratio-seg" style="width:{counts[name] / len(result) * 100:.1f}%;'
+            f'<div class="ratio-seg" style="width:{counts[name] / len(valid) * 100:.1f}%;'
             f'background:{color}" title="{name} {counts[name]} 条">'
-            f'{"%d%%" % round(counts[name] / len(result) * 100)}</div>'
+            f'{"%d%%" % round(counts[name] / len(valid) * 100)}</div>'
             for name, _e, color, _g, _en in LEVEL_STYLES
         )
         st.markdown(f'<div class="ratio-bar">{segs}</div>', unsafe_allow_html=True)
         st.caption(" · ".join(f"{name} {counts[name]}" for name, _e, _c, _g, _en in LEVEL_STYLES))
-    else:
-        n_pos = int((result["情感极性"] == "正面").sum())
-        n_neg = len(result) - n_pos
-        pct_pos = n_pos / len(result) * 100
+    elif len(valid):
+        n_pos = int((valid["情感极性"] == "正面").sum())
+        n_neg = len(valid) - n_pos
+        pct_pos = n_pos / len(valid) * 100
         pct_neg = 100 - pct_pos
         st.markdown(
             f'<div class="ratio-bar">'
@@ -1210,18 +1361,20 @@ def page_batch(theme_id: str):
             f"</div>",
             unsafe_allow_html=True,
         )
-    st.dataframe(result, use_container_width=True, hide_index=True)
+    if n_invalid:
+        st.caption(f"{n_invalid} 条输入为空或纯符号,未包含可分析的有效词语,已标注为「无法判断」并跳过模型预测。")
+    st.dataframe(result, width="stretch", hide_index=True)
     st.download_button(
         "下载预测结果 CSV",
         data=result.to_csv(index=False).encode("utf-8-sig"),
         file_name="batch_predictions.csv",
         mime="text/csv",
-        use_container_width=True,
+        width="stretch",
     )
     page_footer()
 
 
-# ================== 主入口:顶部导航路由(query 参数:page + theme) ==================
+# ================== 主入口:顶部导航路由(query 参数:page + theme + task) ==================
 def main():
     page = st.query_params.get("page", "analyze")
     if page not in {key for key, *_ in NAV_ITEMS}:
@@ -1230,7 +1383,13 @@ def main():
     if theme_id not in THEMES:
         theme_id = DEFAULT_THEME
 
-    # 初始化任务模式(session 首次进入默认二分类)
+    # 初始化任务模式:优先跟随 query 参数(?task=binary|five,导航链接携带,跨页不丢);
+    # 未指定时保持当前会话,首次进入默认二分类
+    task_param = st.query_params.get("task", "")
+    if task_param == "five":
+        st.session_state["task_mode"] = "五级分类"
+    elif task_param == "binary":
+        st.session_state["task_mode"] = "二分类"
     st.session_state.setdefault("task_mode", "二分类")
 
     inject_css(theme_id)
