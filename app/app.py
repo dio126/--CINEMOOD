@@ -451,6 +451,13 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
     color: var(--accent) !important;
 }
 .stButton > button *, .stDownloadButton > button * { color: inherit !important; }
+/* 修复:带 help 的按钮会被 Streamlit 包进 stTooltipIcon>stTooltipHoverTarget 的
+   span 链(不是 .stButton 的子元素),容器类选择器全部失效;标签 <p> 又被全局
+   p{color:var(--ink)} 染黑。改用不依赖容器、直接命中按钮本体的选择器。 */
+button[data-testid="stBaseButton-primary"] p,
+button[kind="primary"] p { color: #FFFEFA !important; }
+button[data-testid="stBaseButton-secondary"] p,
+button[kind="secondary"] p { color: inherit !important; }
 .stButton > button:active, .stDownloadButton > button:active { transform: translateY(0) scale(.985); }
 .stButton > button[kind="primary"],
 .stButton > button[data-testid="stBaseButton-primary"] {
