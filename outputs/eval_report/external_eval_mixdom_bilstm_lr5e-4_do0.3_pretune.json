@@ -1,0 +1,46 @@
+{
+  "run_name": "mixdom_bilstm_lr5e-4_do0.3_pretune",
+  "task": "binary",
+  "model_type": "lstm",
+  "data_note": "ChnSentiCorp9060+DMSC电影4万混域",
+  "n": 30000,
+  "evaluated_at": "2026-11-24 11:27:48",
+  "n_posneg": 20000,
+  "accuracy": 0.844,
+  "precision_pos": 0.8432448613051288,
+  "recall_pos": 0.8451,
+  "f1_pos": 0.8441714114474078,
+  "confusionMatrix_rownegcolpos": [
+    [
+      8429,
+      1571
+    ],
+    [
+      1549,
+      8451
+    ]
+  ],
+  "neutral_pred_pos_rate": 0.5282,
+  "by_group": {
+    "1": {
+      "n": 5000,
+      "pred_pos_rate": 0.112
+    },
+    "2": {
+      "n": 5000,
+      "pred_pos_rate": 0.2022
+    },
+    "3": {
+      "n": 10000,
+      "pred_pos_rate": 0.5282
+    },
+    "4": {
+      "n": 5000,
+      "pred_pos_rate": 0.8118
+    },
+    "5": {
+      "n": 5000,
+      "pred_pos_rate": 0.8784
+    }
+  }
+}

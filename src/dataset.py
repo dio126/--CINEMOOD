@@ -43,11 +43,15 @@ class SentimentDataset(Dataset):
         return self.ids[idx], self.labels[idx]
 
 
-def build_loaders(batch_size: int = 64, processed_dir: str = None):
-    """构造三个 DataLoader。shuffle 仅训练集开启,保证验证/测试评估结果稳定。"""
-    train_ds = SentimentDataset("train", processed_dir)
-    val_ds = SentimentDataset("val", processed_dir)
-    test_ds = SentimentDataset("test", processed_dir)
+def build_loaders(batch_size: int = 64, processed_dir: str = None, suffix: str = ""):
+    """构造三个 DataLoader。shuffle 仅训练集开启,保证验证/测试评估结果稳定。
+
+    suffix 参数用于加载其他同格式产物(如混域二分类的 *_mix.pkl);
+    默认 "" 时加载二分类的 {split}.pkl,既有行为完全不变(向后兼容)。
+    """
+    train_ds = SentimentDataset("train", processed_dir, suffix=suffix)
+    val_ds = SentimentDataset("val", processed_dir, suffix=suffix)
+    test_ds = SentimentDataset("test", processed_dir, suffix=suffix)
     common = dict(num_workers=0, pin_memory=False)  # Windows 约束:num_workers=0
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, drop_last=False, **common)
     val_loader = DataLoader(val_ds, batch_size=batch_size * 2, shuffle=False, **common)

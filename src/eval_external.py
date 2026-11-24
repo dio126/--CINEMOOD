@@ -31,6 +31,8 @@ matplotlib 中文防乱码(Microsoft YaHei + axes.unicode_minus=False)。
 """
 
 import io
+import argparse
+import csv
 import json
 import os
 import pickle
@@ -805,7 +807,110 @@ def run_report():
     print(f"[report] 报告 → {REPORT_MD}\n[report] 指标 → {SUMMARY_JSON}")
 
 
+# =====================================================================
+# 阶段 4:eval_one —— 用 30000 主基准评测【指定的新模型】(方案A/B 改进实验)
+# =====================================================================
+# 与 infer/report 阶段的关系:
+#   - 复用同一份 MAIN_DATA_CSV(只读,绝不改动既有 eval_report 产物);
+#   - --bin_run/--five_run 指定新模型(混域 Bi-LSTM / BERT 等,经 SentimentPredictor
+#     自动识别 Bi-LSTM 与 BERT);
+#   - 指标口径与 report 阶段完全一致:二分类=正+负组 20000 的 Acc/P/R/F1,
+#     五级=30000 全量 exact/±1/macro-F1;
+#   - 产物为【新增文件】:outputs/eval_report/external_eval_<run>.json +
+#     追加 external_benchmark_summary.csv,不覆盖任何旧报告。
+EXTERNAL_SUMMARY_CSV = os.path.join(REPORT_DIR, "external_benchmark_summary.csv")
+
+
+def run_eval_one(bin_run: str = None, five_run: str = None, data_note: str = ""):
+    from predict import SentimentPredictor
+
+    df = pd.read_csv(MAIN_DATA_CSV)
+    texts = df["text"].astype(str).tolist()
+    gt_bin = df["gt_bin"]
+    gt_5c = df["gt_5c"].astype(int)
+    star = df["star"].astype(int)
+
+    for run, task in ((bin_run, "binary"), (five_run, "5class")):
+        if not run:
+            continue
+        print(f"[eval_one] 加载模型 {run}({task})...")
+        p = SentimentPredictor(run)
+        labels, confs = p.predict_batch(texts)
+        # 一致性抽检:批量路径 vs 单条 predict,前 20 条标签必须一致(同 infer 阶段口径)
+        mm = [j for j in range(20) if p.predict(texts[j])["label"] != labels[j]]
+        assert not mm, f"batch 与单条推理不一致: {mm}"
+        print(f"[eval_one] {run}:一致性抽检 20 条通过 ✓")
+
+        result = {"run_name": run, "task": task, "model_type": p.ckpt["config"].get("model_type", "lstm"),
+                  "data_note": data_note, "n": int(len(texts)),
+                  "evaluated_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        if task == "binary":
+            pn_mask = gt_bin.notna()
+            y = gt_bin[pn_mask].astype(int).values
+            pred = np.asarray(labels)[pn_mask.values]
+            cm2 = np.zeros((2, 2), dtype=int)
+            for t, pr in zip(y, pred):
+                cm2[t, pr] += 1
+            tp, fp, fn, tn = int(cm2[1, 1]), int(cm2[0, 1]), int(cm2[1, 0]), int(cm2[0, 0])
+            prec = tp / (tp + fp) if tp + fp else 0.0
+            rec = tp / (tp + fn) if tp + fn else 0.0
+            f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
+            result.update({
+                "n_posneg": int(pn_mask.sum()), "accuracy": float((y == pred).mean()),
+                "precision_pos": prec, "recall_pos": rec, "f1_pos": f1,
+                "confusionMatrix_rownegcolpos": cm2.tolist(),
+                "neutral_pred_pos_rate": float(np.mean(np.asarray(labels)[~pn_mask.values] == 1)),
+                "by_group": {int(s): {"n": int((star == s).sum()),
+                                      "pred_pos_rate": float(np.mean(np.asarray(labels)[(star == s).values] == 1))}
+                             for s in (1, 2, 3, 4, 5)},
+            })
+            print(f"[eval_one] {run}: 正+负 {int(pn_mask.sum())} 条 Acc={result['accuracy']:.4f} F1={f1:.4f}")
+            primary, within1, f1_col = result["accuracy"], "", f1
+        else:
+            from sklearn.metrics import f1_score
+
+            pred = np.asarray(labels)
+            exact = float((pred == gt_5c.values).mean())
+            within1 = float(((pred - gt_5c.values) ** 2 <= 1).mean())
+            mf1 = float(f1_score(gt_5c.values, pred, average="macro", zero_division=0))
+            result.update({
+                "exact_accuracy": exact, "within1_accuracy": within1, "macro_f1": mf1,
+                "by_star_exact": {int(s): float((pred[(star == s).values] == (s - 1)).mean())
+                                  for s in (1, 2, 3, 4, 5)},
+            })
+            print(f"[eval_one] {run}: exact={exact:.4f} within1={within1:.4f} macroF1={mf1:.4f}")
+            primary, within1, f1_col = exact, within1, mf1
+
+        out_json = os.path.join(REPORT_DIR, f"external_eval_{run}.json")
+        with open(out_json, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+
+        cols = ["run_name", "task", "model_type", "data_note", "n",
+                "acc_or_exact", "within1", "f1", "evaluated_at"]
+        exists = os.path.exists(EXTERNAL_SUMMARY_CSV)
+        with open(EXTERNAL_SUMMARY_CSV, "a", newline="", encoding="utf-8-sig") as f:
+            w = csv.DictWriter(f, fieldnames=cols)
+            if not exists:
+                w.writeheader()
+            w.writerow({"run_name": run, "task": task, "model_type": result["model_type"],
+                        "data_note": data_note, "n": len(texts), "acc_or_exact": f"{primary:.4f}",
+                        "within1": f"{within1:.4f}" if within1 != "" else "",
+                        "f1": f"{f1_col:.4f}", "evaluated_at": result["evaluated_at"]})
+        print(f"[eval_one] 结果 → {out_json}(并追加 {EXTERNAL_SUMMARY_CSV})")
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "eval_one":
+        ap = argparse.ArgumentParser(description="用 30000 外部主基准评测指定新模型")
+        ap.add_argument("--bin_run", type=str, default=None, help="二分类模型 run 名")
+        ap.add_argument("--five_run", type=str, default=None, help="五级模型 run 名")
+        ap.add_argument("--data_note", type=str, default="", help="训练数据说明(入汇总表)")
+        a = ap.parse_args(sys.argv[2:])
+        if not a.bin_run and not a.five_run:
+            ap.error("至少指定 --bin_run 或 --five_run 之一")
+        run_eval_one(a.bin_run, a.five_run, a.data_note)
+        sys.exit(0)
+
     stage = sys.argv[1] if len(sys.argv) > 1 else ""
     if stage == "build":
         run_build()
@@ -814,5 +919,6 @@ if __name__ == "__main__":
     elif stage == "report":
         run_report()
     else:
-        print("用法: python src/eval_external.py build|infer|report")
+        print("用法: python src/eval_external.py build|infer|report|eval_one "
+              "[--bin_run X] [--five_run Y] [--data_note 注]")
         sys.exit(1)

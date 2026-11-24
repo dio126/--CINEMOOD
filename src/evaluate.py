@@ -103,12 +103,27 @@ def load_checkpoint_for_eval(run_name: str, device=None):
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = ckpt["config"]  # 训练时保存的模型超参,保证重建结构一致
     num_classes = cfg.get("num_classes", 2)  # 向后兼容:旧 ckpt 默认二分类
-    # 词表按任务区分:五级分类用独立词表 vocab_5class.json
-    if num_classes == 5:
+
+    # ---- 方案A:BERT 分支(config.model_type='bert';旧 ckpt 无此键 → 原 Bi-LSTM 路径不变)----
+    if cfg.get("model_type") == "bert":
+        from models.bert import BertClassifier
+
+        model = BertClassifier(num_classes=num_classes, model_path=cfg.get("model_path"))
+        model.load_state_dict(ckpt["model_state"])
+        model.to(device).eval()
+        return model, ckpt, None, device  # BERT 无词表(vocab=None),tokenizer 按 config 加载
+
+    # 词表优先级:ckpt 显式记录的 vocab_file(方案B1 混域)> 按任务类型默认
+    # (旧 ckpt 无该键 → 行为不变)
+    vocab_file = cfg.get("vocab_file")
+    if vocab_file:
+        vocab = json.load(open(os.path.join(PROJECT_ROOT, vocab_file), encoding="utf-8"))
+    elif num_classes == 5:
         from preprocess_5class import load_vocab_5class as load_vocab
+        vocab = load_vocab()
     else:
         from preprocess import load_vocab
-    vocab = load_vocab()
+        vocab = load_vocab()
     if cfg["model"] == "attn_bilstm":
         model = AttnBiLSTMClassifier(
             vocab_size=len(vocab),
@@ -137,7 +152,9 @@ def run_evaluate(run_name: str):
     from dataset import SentimentDataset
 
     model, ckpt, _vocab, device = load_checkpoint_for_eval(run_name)
-    test_ds = SentimentDataset("test")
+    # 数据后缀:ckpt 显式记录(方案B1 混域 _mix)则用之,旧 ckpt 无该键=原行为
+    suffix = ckpt["config"].get("data_suffix", "")
+    test_ds = SentimentDataset("test", suffix=suffix)
     loader = DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
 
     metrics, preds, labels = evaluate_model(model, loader, device)

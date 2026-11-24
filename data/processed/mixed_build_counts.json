@@ -1,0 +1,94 @@
+{
+  "seed": 42,
+  "built_at": "2026-11-24 11:21:58",
+  "dmsc_zip_rows_read": 2125056,
+  "valid_star_and_text_rows": 2125056,
+  "dropped_invalid_star_or_empty": 0,
+  "dedup_before": 2125056,
+  "dedup_after": 1941116,
+  "dedup_conflict_dropped": 163894,
+  "exclusion_steps": [
+    {
+      "set": "dmsc_sampled.csv(五级训练源,5万)",
+      "size": 50000,
+      "removed_at_step": 50000,
+      "pool_after": 1891116
+    },
+    {
+      "set": "train_5c.pkl(五级)",
+      "size": 40000,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "val_5c.pkl(五级)",
+      "size": 5000,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "test_5c.pkl(五级)",
+      "size": 5000,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "train.pkl(二分类)",
+      "size": 7248,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "val.pkl(二分类)",
+      "size": 906,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "test.pkl(二分类)",
+      "size": 906,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "eval_30000_data.csv(外部基准,禁入训)",
+      "size": 30000,
+      "removed_at_step": 29999,
+      "pool_after": 1861117
+    },
+    {
+      "set": "subtle_300_data.csv(隐晦基准,禁入训)",
+      "size": 300,
+      "removed_at_step": 300,
+      "pool_after": 1860817
+    }
+  ],
+  "pool_per_star_in_window": {
+    "1": 152062,
+    "2": 149266,
+    "4": 574640,
+    "5": 556116
+  },
+  "selfcheck_dmsc_vs_exclusions": {
+    "dmsc_sampled.csv(五级训练源,5万)": 0,
+    "train_5c.pkl(五级)": 0,
+    "val_5c.pkl(五级)": 0,
+    "test_5c.pkl(五级)": 0,
+    "train.pkl(二分类)": 0,
+    "val.pkl(二分类)": 0,
+    "test.pkl(二分类)": 0,
+    "eval_30000_data.csv(外部基准,禁入训)": 0,
+    "subtle_300_data.csv(隐晦基准,禁入训)": 0
+  },
+  "merged_dedup": {
+    "before": 49060,
+    "after": 49060,
+    "conflict_dropped": 0
+  },
+  "final_total": 49060,
+  "splits": {
+    "train": 39248,
+    "val": 4906,
+    "test": 4906
+  }
+}

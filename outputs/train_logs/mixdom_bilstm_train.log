@@ -1,0 +1,11 @@
+[train] 设备: cuda,种子: 42
+[train] 词表 50000(vocab_mixed.json),数据后缀 '_mix',训练/验证/测试批次数: 614/39/39
+[train] 已加载预训练词向量矩阵 (50000, 200),freeze=False
+[train] epoch 01/30 train_loss=0.4304 train_acc=0.7992 val_loss=0.3554 val_acc=0.8465 (6s)
+[train] epoch 02/30 train_loss=0.2884 train_acc=0.8807 val_loss=0.3398 val_acc=0.8561 (12s)
+[train] epoch 03/30 train_loss=0.2151 train_acc=0.9140 val_loss=0.3669 val_acc=0.8500 (18s)
+[train] epoch 04/30 train_loss=0.1614 train_acc=0.9379 val_loss=0.4284 val_acc=0.8361 (24s)
+[train] epoch 05/30 train_loss=0.1204 train_acc=0.9551 val_loss=0.5010 val_acc=0.8367 (29s)
+[train] 早停触发:验证准确率已 3 轮未提升
+[train] 完成 mixdom_bilstm_lr5e-4_do0.3_pretune: best_val_acc=0.8561 test_f1=0.8415,结果已写入 D:\作业\机器学习实践\movie-sentiment\outputs\experiments_summary.csv
+EXIT=0

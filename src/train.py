@@ -67,8 +67,9 @@ def build_model(args, vocab_size: int, device):
     pretrained = None
     freeze = False
     if args.embedding in ("pretrained", "pretrained_finetune"):
-        # 阶段4:加载 data/processed/embedding_matrix.npy(由下载脚本预处理生成)
-        matrix_path = os.path.join(PROCESSED_DIR, "embedding_matrix.npy")
+        # 阶段4:加载词向量矩阵(默认二分类矩阵;--embedding_matrix 可指向
+        # 其他任务专属矩阵,如混域的 embedding_matrix_mixed.npy)
+        matrix_path = args.embedding_matrix or os.path.join(PROCESSED_DIR, "embedding_matrix.npy")
         if not os.path.exists(matrix_path):
             raise FileNotFoundError(
                 f"未找到预训练词向量矩阵 {matrix_path},请先运行 "
@@ -160,6 +161,13 @@ def main():
     parser.add_argument("--max_epochs", type=int, default=30)
     parser.add_argument("--patience", type=int, default=3, help="早停耐心轮数")
     parser.add_argument("--run_name", type=str, required=True, help="实验名,用于输出文件前缀")
+    # ---- 方案B1 混域二分类支持(全部参数默认值=原行为,零回归)----
+    parser.add_argument("--data_suffix", type=str, default="",
+                        help="数据 pkl 后缀(如混域二分类用 _mix,默认空=原二分类数据)")
+    parser.add_argument("--vocab_file", type=str, default="",
+                        help="词汇表 json 路径(默认空=data/processed/vocab.json)")
+    parser.add_argument("--embedding_matrix", type=str, default="",
+                        help="预训练词向量矩阵 npy 路径(默认空=data/processed/embedding_matrix.npy)")
     args = parser.parse_args()
 
     # ---------- 全局可复现性 ----------
@@ -171,9 +179,11 @@ def main():
     from dataset import build_loaders
     from preprocess import load_vocab
 
-    vocab = load_vocab()
-    train_loader, val_loader, test_loader = build_loaders(args.batch_size)
-    print(f"[train] 词表 {len(vocab)},训练/验证/测试批次数: "
+    vocab_file = args.vocab_file or os.path.join(PROCESSED_DIR, "vocab.json")
+    vocab = load_vocab(vocab_file)
+    train_loader, val_loader, test_loader = build_loaders(args.batch_size, suffix=args.data_suffix)
+    print(f"[train] 词表 {len(vocab)}({os.path.basename(vocab_file)}),"
+          f"数据后缀 '{args.data_suffix}',训练/验证/测试批次数: "
           f"{len(train_loader)}/{len(val_loader)}/{len(test_loader)}")
 
     # ---------- 模型 / 损失 / 优化器 ----------
@@ -242,6 +252,9 @@ def main():
             "embedding_dim": args.emb_dim, "hidden_dim": args.hidden,
             "dropout": args.dropout, "lr": args.lr,
             "batch_size": args.batch_size, "maxlen": 128,
+            # 方案B1:记录数据/词表来源(相对项目根),旧 ckpt 无这些键则按原行为
+            "data_suffix": args.data_suffix,
+            "vocab_file": os.path.relpath(vocab_file, PROJECT_ROOT),
         },
         "best_val_acc": best_val_acc, "best_epoch": best_epoch,
     }

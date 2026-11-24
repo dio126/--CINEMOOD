@@ -44,10 +44,57 @@ class SentimentPredictor:
         # 复用 evaluate 模块的检查点加载(同一份重建逻辑;按 ckpt 自动识别任务)
         self.model, self.ckpt, self.vocab, self.device = load_checkpoint_for_eval(run_name)
         self.num_classes = self.ckpt["config"].get("num_classes", 2)  # 旧 ckpt 默认二分类
-        self.is_attn = self.ckpt["config"]["model"] == "attn_bilstm"
+        self.is_attn = self.ckpt["config"].get("model") == "attn_bilstm"
+        # 方案A:BERT ckpt(config.model_type='bert');tokenizer 目录随 ckpt config 记录
+        self.is_bert = self.ckpt["config"].get("model_type") == "bert"
+        self.maxlen = self.ckpt["config"].get("maxlen", 128)
+        self._tokenizer = None
+
+    @property
+    def tokenizer(self):
+        """BERT 分词器(懒加载,仅 BERT ckpt 使用;目录来自 ckpt config,本地加载)。"""
+        if self._tokenizer is None:
+            from models.bert import resolve_bert_dir
+            from transformers import AutoTokenizer
+
+            d = self.ckpt["config"].get("tokenizer_dir") or self.ckpt["config"].get("model_path")
+            self._tokenizer = AutoTokenizer.from_pretrained(resolve_bert_dir(d), local_files_only=True)
+        return self._tokenizer
+
+    def _probs_to_result(self, probs: "np.ndarray", words=None) -> dict:
+        """概率数组 → 统一返回结构(tokens 传入时与词一一对应)。"""
+        label = int(np.argmax(probs))
+        if self.num_classes == 5:
+            from preprocess_5class import CLASS_NAMES
+
+            probs_dict = {name: float(probs[i]) for i, name in enumerate(CLASS_NAMES)}
+            polarity = CLASS_NAMES[label]
+        else:
+            probs_dict = {"负面": float(probs[0]), "正面": float(probs[1])}
+            polarity = "正面" if label == 1 else "负面"
+        return {
+            "label": label,
+            "polarity": polarity,
+            "num_classes": self.num_classes,
+            "confidence": float(probs[label]),
+            "probs": probs_dict,
+            "tokens": words,
+            "attn_weights": None,  # BERT/普通 Bi-LSTM 无逐词注意力
+        }
 
     def predict(self, text: str) -> dict:
         """单条文本推理。返回 label/prob/confidence/tokens/attn_weights。"""
+        if self.is_bert:
+            enc = self.tokenizer(str(text), truncation=True, max_length=self.maxlen,
+                                 padding="max_length", return_tensors="pt")
+            x = enc["input_ids"].to(self.device)
+            with torch.no_grad():
+                logits = self.model(x)
+            probs = torch.softmax(logits[0], dim=-1).cpu().numpy()
+            n_valid = int(enc["attention_mask"][0].sum())
+            words = self.tokenizer.convert_ids_to_tokens(enc["input_ids"][0][:n_valid].tolist())
+            return self._probs_to_result(probs, words)
+
         from preprocess import MAXLEN, encode_tokens, tokenize
 
         # 关键:与训练完全一致的预处理路径
@@ -84,6 +131,42 @@ class SentimentPredictor:
             # 截取有效长度内的注意力权重(与词一一对应)
             "attn_weights": weights[: len(words)].tolist() if weights is not None else None,
         }
+
+    def predict_batch(self, texts: list, batch_size: int = 256):
+        """批量推理(Bi-LSTM 与 BERT 统一入口),返回 (labels, confs)。
+
+        预处理与 predict() 单条完全同路径(分词/编码或 tokenizer),
+        供外部基准批量评估使用,绝不另写第二份逻辑。
+        """
+        if self.is_bert:
+            labels, confs = [], []
+            with torch.no_grad():
+                for i in range(0, len(texts), batch_size):
+                    enc = self.tokenizer([str(t) for t in texts[i:i + batch_size]],
+                                         truncation=True, max_length=self.maxlen,
+                                         padding="max_length", return_tensors="pt")
+                    x = enc["input_ids"].to(self.device)
+                    logits = self.model(x)
+                    probs = torch.softmax(logits, dim=-1).cpu().numpy()
+                    labels.extend(probs.argmax(axis=1).tolist())
+                    confs.extend(probs.max(axis=1).tolist())
+            return labels, confs
+
+        from preprocess import MAXLEN, encode_tokens, tokenize
+
+        token_lists = [tokenize(t)[:MAXLEN] for t in texts]  # 与 predict() 相同截断
+        labels, confs = [], []
+        with torch.no_grad():
+            for i in range(0, len(token_lists), batch_size):
+                ids = np.stack([encode_tokens(ts, self.vocab)
+                                for ts in token_lists[i:i + batch_size]])
+                x = torch.from_numpy(ids).to(self.device)
+                out = self.model(x)
+                logits = out[0] if isinstance(out, tuple) else out  # 注意力模型返回 (logits, alpha)
+                probs = torch.softmax(logits, dim=-1).cpu().numpy()
+                labels.extend(probs.argmax(axis=1).tolist())
+                confs.extend(probs.max(axis=1).tolist())
+        return labels, confs
 
 
 if __name__ == "__main__":

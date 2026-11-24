@@ -13,3 +13,5 @@ bilstm_lr1e-4_do0.5,bilstm,random,0.0001,128,0.5,64,0.8444,0.8366,0.8884,0.8072,
 bilstm_lr5e-4_do0.3,bilstm,random,0.0005,128,0.3,64,0.8653,0.8411,0.8701,0.8390,0.8543,4
 bilstm_lr5e-4_do0.3_pretune,bilstm,pretrained_finetune,0.0005,128,0.3,64,0.8951,0.8896,0.8882,0.9165,0.9022,3
 bilstm_lr5e-4_do0.5,bilstm,random,0.0005,128,0.5,64,0.8477,0.8466,0.8974,0.8171,0.8554,3
+mixdom_bilstm_lr5e-4_do0.3_pretune,bilstm,pretrained_finetune,0.0005,128,0.3,64,0.8561,0.8388,0.8370,0.8461,0.8415,2
+bert_roberta_wwm,bert,chinese-roberta-wwm-ext,2e-05,768,0.1,32,0.9161,0.9382,0.9340,0.9563,0.9450,1
