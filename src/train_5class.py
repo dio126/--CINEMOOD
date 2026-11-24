@@ -69,7 +69,7 @@ def build_model(args, vocab_size: int, device):
     pretrained = None
     freeze = False
     if args.embedding in ("pretrained", "pretrained_finetune"):
-        matrix_path = os.path.join(PROCESSED_DIR, "embedding_matrix_5class.npy")
+        matrix_path = args.embedding_matrix or os.path.join(PROCESSED_DIR, "embedding_matrix_5class.npy")
         if not os.path.exists(matrix_path):
             raise FileNotFoundError(f"未找到 {matrix_path},请先运行 preprocess_5class.py")
         pretrained = torch.tensor(np.load(matrix_path), dtype=torch.float32)
@@ -197,26 +197,36 @@ def main():
     parser.add_argument("--max_epochs", type=int, default=30)
     parser.add_argument("--patience", type=int, default=3)
     parser.add_argument("--run_name", type=str, required=True, help="建议以 5c_ 前缀命名")
+    # ---- 方案B2 扩数据支持(全部参数默认值=原行为,零回归)----
+    parser.add_argument("--data_suffix", type=str, default="",
+                        help="数据 pkl 后缀(如扩数据的 _5cL,默认 _5c=原五级数据)")
+    parser.add_argument("--vocab_file", type=str, default="",
+                        help="词汇表 json 路径(默认空=data/processed/vocab_5class.json)")
+    parser.add_argument("--embedding_matrix", type=str, default="",
+                        help="词向量矩阵 npy 路径(默认空=data/processed/embedding_matrix_5class.npy)")
     args = parser.parse_args()
 
     set_seed(SEED)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[5c] 设备: {device},种子: {SEED}")
 
-    # ---------- 数据(五级专属 pkl,经 Dataset 的 suffix 参数加载)----------
+    # ---------- 数据(默认五级专属 pkl;--data_suffix 可指向扩数据产物,向后兼容)----------
     from dataset import SentimentDataset
     from preprocess_5class import load_vocab_5class
     from torch.utils.data import DataLoader
 
-    vocab = load_vocab_5class()
+    suffix = args.data_suffix or "_5c"
+    vocab_file = args.vocab_file or os.path.join(PROCESSED_DIR, "vocab_5class.json")
+    vocab = load_vocab_5class(vocab_file)
     common = dict(num_workers=0, pin_memory=False)  # Windows 约束
-    train_loader = DataLoader(SentimentDataset("train", suffix="_5c"),
+    train_loader = DataLoader(SentimentDataset("train", suffix=suffix),
                               batch_size=args.batch_size, shuffle=True, **common)
-    val_loader = DataLoader(SentimentDataset("val", suffix="_5c"),
+    val_loader = DataLoader(SentimentDataset("val", suffix=suffix),
                             batch_size=args.batch_size * 2, shuffle=False, **common)
-    test_loader = DataLoader(SentimentDataset("test", suffix="_5c"),
+    test_loader = DataLoader(SentimentDataset("test", suffix=suffix),
                              batch_size=args.batch_size * 2, shuffle=False, **common)
-    print(f"[5c] 词表 {len(vocab)},批次数 {len(train_loader)}/{len(val_loader)}/{len(test_loader)}")
+    print(f"[5c] 词表 {len(vocab)}({os.path.basename(vocab_file)}),数据后缀 '{suffix}',"
+          f"批次数 {len(train_loader)}/{len(val_loader)}/{len(test_loader)}")
 
     # ---------- 类别不均衡:逆频率权重 weight_c = N / (K * count_c) ----------
     train_labels = np.array(train_loader.dataset.labels)
@@ -289,6 +299,9 @@ def main():
             "embedding_dim": args.emb_dim, "hidden_dim": args.hidden,
             "dropout": args.dropout, "lr": args.lr, "batch_size": args.batch_size,
             "maxlen": 128, "num_classes": NUM_CLASSES,  # 五级标识,评估/推理据此重建
+            # 方案B2:记录数据/词表来源(相对项目根),旧 ckpt 无这些键则按原行为
+            "data_suffix": suffix,
+            "vocab_file": os.path.relpath(vocab_file, PROJECT_ROOT),
         },
         "best_val_macro_f1": best_f1, "best_epoch": best_epoch,
     }

@@ -1,0 +1,12 @@
+[5c] 设备: cuda,种子: 42
+[5c] 词表 50000(vocab_5class_large.json),数据后缀 '_5cL',批次数 3750/235/235
+[5c] 训练集各类样本数 [48045, 47927, 48049, 48039, 47940],逆频率权重 [0.999, 1.002, 0.999, 0.999, 1.001]
+[5c] 加载五级词向量矩阵 (50000, 200),freeze=False
+[5c] epoch 01/30 loss=1.1988 train_mf1=0.4695 val_loss=1.1229 val_mf1=0.5079 (174s)
+[5c] epoch 02/30 loss=1.0657 train_mf1=0.5390 val_loss=1.1072 val_mf1=0.5233 (239s)
+[5c] epoch 03/30 loss=0.9908 train_mf1=0.5768 val_loss=1.1143 val_mf1=0.5195 (306s)
+[5c] epoch 04/30 loss=0.9182 train_mf1=0.6128 val_loss=1.1571 val_mf1=0.5136 (374s)
+[5c] epoch 05/30 loss=0.8366 train_mf1=0.6520 val_loss=1.2248 val_mf1=0.5054 (440s)
+[5c] 早停触发:验证 macro-F1 已 3 轮未提升
+[5c] 完成 5c300k_bilstm_pretune_h256: best_val_mf1=0.5233 test_acc=0.5131 test_macro_f1=0.5145 → D:\作业\机器学习实践\movie-sentiment\outputs\experiments_summary_5class.csv
+EXIT=0

@@ -1,0 +1,17 @@
+[5cL] 为五级大词表(50000 词)构建词向量矩阵(复用腾讯 light 缓存)...
+[wordvec] 尝试下载: tencent_ailab_d200_light_hf (https://hf-mirror.com/shibing624/text2vec-word2vec-tencent-chinese/resolve/main/light_Tencent_AILab_ChineseEmbedding.bin)
+[wordvec] 命中磁盘缓存: D:\作业\机器学习实践\movie-sentiment\data\raw\tencent_light_word2vec.bin(跳过下载)
+[wordvec] 二进制头: 143613 词 × 200 维
+[wordvec] 已解析 0/143613 词
+[wordvec] 已解析 20000/143613 词
+[wordvec] 已解析 40000/143613 词
+[wordvec] 已解析 60000/143613 词
+[wordvec] 已解析 80000/143613 词
+[wordvec] 已解析 100000/143613 词
+[wordvec] 已解析 120000/143613 词
+[wordvec] 已解析 140000/143613 词
+[wordvec] 预训练命中行标准差=0.2677(OOV 行按同量级初始化)
+[wordvec] OOV 组合式初始化:1776 个 否定+X 合并词用 vec(否定词)+vec(X) 初始化
+[wordvec] tencent_ailab_d200_light_hf 加载成功:维度 200,词表命中 30310/49998(60.6%)
+[5cL] 词向量矩阵已保存:D:\作业\机器学习实践\movie-sentiment\data\processed\embedding_matrix_5class_large.npy (50000, 200)(来源 tencent_ailab_d200_light_hf)
+EXIT=0

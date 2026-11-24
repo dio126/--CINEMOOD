@@ -1,0 +1,49 @@
+Building prefix dict from the default dictionary ...
+Loading model from cache C:\Users\Lenovo\AppData\Local\Temp\jieba.cache
+Loading model cost 0.502 seconds.
+Prefix dict has been built successfully.
+[build] DMSC 解析:zip 共 2125056 行 → 有效(text 非空且星级 1-5)2125056 行
+[build] 去重(同训练规则):2125056 → 1941116(标签冲突整组丢弃 163894 条)
+[5cL] 排除 dmsc_sampled.csv(五级训练源,5万)(集合 50000):移除 50000 条 → 剩余池 1891116
+[5cL] 排除 train_5c.pkl(五级)(集合 40000):移除 0 条 → 剩余池 1891116
+[5cL] 排除 val_5c.pkl(五级)(集合 5000):移除 0 条 → 剩余池 1891116
+[5cL] 排除 test_5c.pkl(五级)(集合 5000):移除 0 条 → 剩余池 1891116
+[5cL] 排除 train.pkl(二分类)(集合 7248):移除 0 条 → 剩余池 1891116
+[5cL] 排除 val.pkl(二分类)(集合 906):移除 0 条 → 剩余池 1891116
+[5cL] 排除 test.pkl(二分类)(集合 906):移除 0 条 → 剩余池 1891116
+[5cL] 排除 eval_30000_data.csv(外部基准,禁入训)(集合 30000):移除 29999 条 → 剩余池 1861117
+[5cL] 排除 subtle_300_data.csv(隐晦基准,禁入训)(集合 300):移除 300 条 → 剩余池 1860817
+[5cL] 排除 mixed_binary_dmsc.csv(B1 混域已用)(集合 40000):移除 40000 条 → 剩余池 1820817
+[5cL] 分层抽样 300000 条,每级分布 {0: 60000, 1: 60000, 2: 60000, 3: 60000, 4: 60000}
+[5cL] 防泄漏自检:抽样与全部排除集(含 30000 基准与 B1 已用)交集均为 0 ✓
+[5cL] 分词中(jieba,30 万条,约需几分钟)...
+[5cL] 词汇表(仅训练集构建):50000 → D:\作业\机器学习实践\movie-sentiment\data\processed\vocab_5class_large.json
+[5cL] train: 240000 条 → D:\作业\机器学习实践\movie-sentiment\data\processed\train_5cL.pkl
+[5cL] val: 30000 条 → D:\作业\机器学习实践\movie-sentiment\data\processed\val_5cL.pkl
+[5cL] test: 30000 条 → D:\作业\机器学习实践\movie-sentiment\data\processed\test_5cL.pkl
+[5cL] 为五级大词表(50000 词)构建词向量矩阵(复用腾讯 light 缓存)...
+[wordvec] 尝试下载: tencent_ailab_d200_light_hf (https://hf-mirror.com/shibing624/text2vec-word2vec-tencent-chinese/resolve/main/light_Tencent_AILab_ChineseEmbedding.bin)
+[wordvec] 命中磁盘缓存: D:\作业\机器学习实践\movie-sentiment\data\raw\tencent_light_word2vec.bin(跳过下载)
+[wordvec] 二进制头: 143613 词 × 200 维
+[wordvec] 已解析 0/143613 词
+[wordvec] 已解析 20000/143613 词
+[wordvec] 已解析 40000/143613 词
+[wordvec] 已解析 60000/143613 词
+[wordvec] 已解析 80000/143613 词
+[wordvec] 已解析 100000/143613 词
+[wordvec] 已解析 120000/143613 词
+[wordvec] 已解析 140000/143613 词
+[wordvec] 预训练命中行标准差=0.2677(OOV 行按同量级初始化)
+[wordvec] tencent_ailab_d200_light_hf 失败: KeyError: '别'
+[wordvec] 尝试下载: tencent_ailab_d200_small (https://ai.tencent.com/ailab/nlp/data/tencent-ailab-embedding-zh-d200-v0.1.0-s.txt.tar.gz)
+[wordvec] tencent_ailab_d200_small 失败: ReadError: not a gzip file
+[wordvec] 尝试下载: fasttext_cc_zh_300 (https://dl.fbaipublicfiles.com/fasttext/vectors-crawl/cc.zh.300.vec.gz)
+[wordvec] fasttext_cc_zh_300 失败: TimeoutError: The read operation timed out
+Traceback (most recent call last):
+  File "D:\作业\机器学习实践\movie-sentiment\src\preprocess_5class_large.py", line 163, in <module>
+    build_embedding_matrix()
+    ~~~~~~~~~~~~~~~~~~~~~~^^
+  File "D:\作业\机器学习实践\movie-sentiment\src\preprocess_5class_large.py", line 154, in build_embedding_matrix
+    raise RuntimeError("五级大词表词向量构建失败")
+RuntimeError: 五级大词表词向量构建失败
+EXIT=1

@@ -255,9 +255,14 @@ def try_download_and_extract(vocab: dict, deadline: float):
                 if idx in found or len(w) < 2:
                     continue
                 for neg in ("不", "没", "别"):
+                    # 守卫:否定词本身可能不在词表(如被停用词过滤/词频低),
+                    # 此时无法组合初始化,跳过(修复:旧代码直接 vocab[neg] 触发 KeyError)
+                    neg_idx = vocab.get(neg)
+                    if neg_idx is None:
+                        continue
                     if w.startswith(neg) and len(w) > len(neg) and vocab.get(w[len(neg):]) in found:
                         base_idx = vocab[w[len(neg):]]
-                        matrix[idx] = matrix[vocab[neg]] + matrix[base_idx]
+                        matrix[idx] = matrix[neg_idx] + matrix[base_idx]
                         n_compositional += 1
                         break
             if n_compositional:
