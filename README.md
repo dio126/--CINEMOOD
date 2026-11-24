@@ -382,7 +382,9 @@ config 自动走 BERT 分支(旧 Bi-LSTM 路径零改动);另加数据侧+模型
 
 ```bash
 PY=.venv/Scripts/python.exe
-# 方案A 前置:下载 BERT 本地权重(HF 镜像;已入 .gitignore)
+# 方案A 前置 1/2:安装 BERT 依赖(transformers/tokenizers 已列入 requirements.txt)
+$PY -m pip install transformers==5.24.0 tokenizers==0.23.3 -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 方案A 前置 2/2:下载 BERT 本地权重(HF 镜像;已入 .gitignore)
 HF_ENDPOINT=https://hf-mirror.com $PY -c "from huggingface_hub import snapshot_download; \
   snapshot_download('hfl/chinese-roberta-wwm-ext', local_dir='models/bert-base', \
   allow_patterns=['config.json','vocab.txt','tokenizer_config.json','tokenizer.json','pytorch_model.bin'])"
