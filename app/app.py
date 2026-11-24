@@ -1130,7 +1130,7 @@ def _render_analysis(predictor, r: dict, theme_id: str):
     if r.get("num_classes") == 5:
         pcols = st.columns(5)
         for (name, emoji, color, _glow, _en), col in zip(LEVEL_STYLES, pcols):
-            col.metric(name, f"{r['probs'][name]:.1%}")
+            col.metric(f"{name}概率", f"{r['probs'][name]:.1%}")  # 标签格式与二元模式统一("XX概率")
     else:
         c1, c2 = st.columns(2)
         c1.metric("负面概率", f"{r['probs']['负面']:.1%}")
