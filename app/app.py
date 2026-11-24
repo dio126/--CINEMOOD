@@ -246,6 +246,64 @@ a { color: var(--accent); }
 }
 .theme-dot:hover { transform: scale(1.18); }
 
+/* ===== 顶部导航(Streamlit 容器版:粘性吸顶 + 应用内按钮,整页零刷新) ===== */
+.topnav-mark { display: none; }
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark) {
+    position: sticky;
+    top: 12px;
+    z-index: 100;
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    background: rgba(255, 254, 250, .90);
+    backdrop-filter: blur(18px) saturate(1.1);
+    -webkit-backdrop-filter: blur(18px) saturate(1.1);
+    border: 1px solid var(--line) !important;
+    border-radius: 17px !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark):hover {
+    border-color: var(--line) !important;  /* 抵消卡片悬停效果,导航条保持稳定 */
+    box-shadow: var(--shadow-sm) !important;
+}
+/* 导航按钮 → 胶囊形态(仅作用于顶栏内的按钮) */
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark) .stButton > button,
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark) .stButton > button:hover {
+    min-height: 38px;
+    padding: 6px 14px;
+    border-radius: 10px !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    transition: background .16s ease, color .16s ease;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark) .stButton > button:hover {
+    background: var(--accent-soft) !important;
+    color: var(--accent) !important;
+    transform: none !important;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark)
+    .stButton > button[kind="primary"],
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark)
+    .stButton > button[data-testid="stBaseButton-primary"],
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.topnav-mark)
+    .stButton > button[kind="primary"]:hover {
+    background: var(--accent) !important;
+    color: #FFFEFA !important;
+    box-shadow: 0 3px 10px rgba(31, 45, 37, .10) !important;
+}
+/* 顶栏右侧(模式徽章 + 主题色点) */
+.nav-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.nav-right .mode-badge { margin-left: 0; border-left: none; padding-left: 0; }
+
 /* ===== Hero：杂志式标题 + 编辑注记 ===== */
 .hero {
     position: relative;
@@ -652,18 +710,23 @@ NAV_ITEMS = [
 ]
 
 
-def top_nav(active_key: str, theme_id: str):
-    """悬浮导航：品牌、页面入口、浅色主题与当前任务模式。
+def _go_page(key: str):
+    """导航按钮回调:改 query 参数触发应用内重渲染(SPA 式局部刷新,浏览器整页零刷新)。
 
-    所有链接携带 ?task=(binary|five):整页跳转后 main() 会按参数恢复任务模式,
+    st.query_params 的单键赋值会保留其余参数(theme/task 不丢)。
+    """
+    st.query_params["page"] = key
+
+
+def top_nav(active_key: str, theme_id: str):
+    """悬浮导航:品牌、页面入口按钮(应用内切换,不整页刷新)、主题色点与任务模式。
+
+    页面切换走 st.query_params(仅重渲染应用,无白屏);主题色点仍是链接式
+    (切主题属低频操作,保留整页跳转以换取渐变色点的精致呈现)。
+    ?task=(binary|five) 随导航携带:main() 按参数恢复任务模式,
     会话不因页面切换而丢失(批量页与单句分析共用同一套模型配置)。
     """
     task = "five" if st.session_state.get("task_mode", "二分类") == "五级分类" else "binary"
-    pills = "".join(
-        f'<a class="navpill{" active" if key == active_key else ""}" '
-        f'href="?page={key}&theme={theme_id}&task={task}" target="_self">{label}</a>'
-        for key, label, _icon in NAV_ITEMS
-    )
     dots = "".join(
         f'<a class="theme-dot{" active" if tid == theme_id else ""}" '
         f'href="?page={active_key}&theme={tid}&task={task}" target="_self" '
@@ -672,16 +735,27 @@ def top_nav(active_key: str, theme_id: str):
         for tid, t in THEMES.items()
     )
     mode = st.session_state.get("task_mode", "二分类")
-    st.markdown(
-        f'<nav class="topnav">'
-        f'<a class="brand" href="?page=analyze&theme={theme_id}&task={task}" target="_self" aria-label="CINEMOOD 首页">'
-        f'<span class="brand-mark">CM</span>'
-        f'<span class="brand-txt">CINEMOOD<small>情绪放映室 · NLP LAB</small></span></a>'
-        f'<div class="navpills">{pills}</div>'
-        f'<div class="mode-badge"><span class="dot"></span>{mode}</div>'
-        f'<div class="theme-dots" aria-label="界面配色">{dots}</div></nav>',
-        unsafe_allow_html=True,
-    )
+
+    with st.container(border=True):
+        # 吸顶标记:CSS 据此把该容器固定为粘性导航条(见 CUSTOM_CSS)
+        st.markdown('<i class="topnav-mark"></i>', unsafe_allow_html=True)
+        c_brand, c_n1, c_n2, c_n3, c_right = st.columns([1.7, 0.95, 1.1, 0.95, 1.5], gap="small")
+        c_brand.markdown(
+            '<span class="brand"><span class="brand-mark">CM</span>'
+            '<span class="brand-txt">CINEMOOD<small>情绪放映室 · NLP LAB</small></span></span>',
+            unsafe_allow_html=True,
+        )
+        for col, (key, label, _icon) in zip((c_n1, c_n2, c_n3), NAV_ITEMS):
+            col.button(
+                label, key=f"nav_{key}", width="stretch",
+                type="primary" if key == active_key else "secondary",
+                on_click=_go_page, args=(key,),
+            )
+        c_right.markdown(
+            f'<div class="nav-right"><div class="mode-badge"><span class="dot"></span>{mode}</div>'
+            f'<div class="theme-dots" aria-label="界面配色">{dots}</div></div>',
+            unsafe_allow_html=True,
+        )
 
 
 def hero_block(page_key: str, theme_id: str, title_html: str, sub: str, kicker: str, mini: bool = False):
@@ -842,11 +916,15 @@ def _theme_c_rgb(theme_id: str) -> str:
 
 # ================== 控制台(任务模式 + 模型选择,融入页面) ==================
 def _switch_task_mode(mode: str):
-    """切换任务模式:同步 session 与 query 参数(?task=,导航链接携带),并清掉旧结论。"""
-    st.session_state["task_mode"] = mode
-    st.session_state.pop("analyze_result", None)
-    st.query_params["task"] = "five" if mode == "五级分类" else "binary"
-    st.rerun()
+    """任务模式切换回调(on_click,重跑前执行):单次重跑完成切换,不再显式 st.rerun。
+
+    回调里同步 session 与 query 参数(?task=),按钮点击本身触发的重跑会带着
+    新状态渲染——一次点击只渲染一次,页面不再闪两下。
+    """
+    if st.session_state.get("task_mode") != mode:
+        st.session_state["task_mode"] = mode
+        st.session_state.pop("analyze_result", None)
+        st.query_params["task"] = "five" if mode == "五级分类" else "binary"
 
 
 # 弱基线(run 名)启发式:不含这些标记的 run 视为随机词向量基线实验。
@@ -893,15 +971,14 @@ def render_control():
 
     st.markdown('<div class="control-label">01 · 任务模式</div>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    if c1.button("二元情感", key="mode_binary",
-                 type="primary" if cur_mode == "二分类" else "secondary", width="stretch"):
-        if cur_mode != "二分类":
-            _switch_task_mode("二分类")
-    if c2.button("五级情感", key="mode_five",
-                 type="primary" if cur_mode == "五级分类" else "secondary", width="stretch",
-                 help="拓展任务：豆瓣 1–5 星 → 非常负面至非常正面"):
-        if cur_mode != "五级分类":
-            _switch_task_mode("五级分类")
+    # on_click 回调:一次点击 = 一次重跑(消灭"点击重跑 + st.rerun()"的双重渲染闪烁)
+    c1.button("二元情感", key="mode_binary",
+              type="primary" if cur_mode == "二分类" else "secondary", width="stretch",
+              on_click=_switch_task_mode, args=("二分类",))
+    c2.button("五级情感", key="mode_five",
+              type="primary" if cur_mode == "五级分类" else "secondary", width="stretch",
+              help="拓展任务：豆瓣 1–5 星 → 非常负面至非常正面",
+              on_click=_switch_task_mode, args=("五级分类",))
     cur_mode = st.session_state.get("task_mode", "二分类")
 
     if cur_mode == "二分类":
