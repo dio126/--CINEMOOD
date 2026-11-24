@@ -1,0 +1,365 @@
+{
+  "models": {
+    "bin_run": "bilstm_lr5e-4_do0.3_pretune",
+    "five_run": "5c_bilstm_pretune_h256",
+    "device": "cuda",
+    "batch_size": 256,
+    "started_at": "2026-11-24 10:40:43",
+    "finished_at": "2026-11-24 10:40:51",
+    "wall_seconds": 8.2
+  },
+  "count_chain": {
+    "seed": 42,
+    "built_at": "2026-11-24 10:37:01",
+    "length_window_chars": [
+      5,
+      300
+    ],
+    "dmsc_zip_rows_read": 2125056,
+    "valid_star_and_text_rows": 2125056,
+    "dropped_invalid_star_or_empty": 0,
+    "dedup_before": 2125056,
+    "dedup_after": 1941116,
+    "dedup_conflict_dropped": 163894,
+    "exclusion_steps": [
+      {
+        "set": "dmsc_sampled.csv(五级训练源,5万)",
+        "size": 50000,
+        "removed_at_step": 50000,
+        "pool_after": 1891116
+      },
+      {
+        "set": "train_5c.pkl(五级)",
+        "size": 40000,
+        "removed_at_step": 0,
+        "pool_after": 1891116
+      },
+      {
+        "set": "val_5c.pkl(五级)",
+        "size": 5000,
+        "removed_at_step": 0,
+        "pool_after": 1891116
+      },
+      {
+        "set": "test_5c.pkl(五级)",
+        "size": 5000,
+        "removed_at_step": 0,
+        "pool_after": 1891116
+      },
+      {
+        "set": "train.pkl(二分类)",
+        "size": 7248,
+        "removed_at_step": 0,
+        "pool_after": 1891116
+      },
+      {
+        "set": "val.pkl(二分类)",
+        "size": 906,
+        "removed_at_step": 0,
+        "pool_after": 1891116
+      },
+      {
+        "set": "test.pkl(二分类)",
+        "size": 906,
+        "removed_at_step": 0,
+        "pool_after": 1891116
+      }
+    ],
+    "pool_overlap_with_union_before_exclusion": 50000,
+    "pool_after_triple_exclusion": 1891116,
+    "pool_per_star_after_exclusion": {
+      "1": 158737,
+      "2": 155280,
+      "3": 429489,
+      "4": 582622,
+      "5": 564988
+    },
+    "pool_per_star_after_length_filter": {
+      "1": 157122,
+      "2": 154325,
+      "3": 427204,
+      "4": 579700,
+      "5": 561176
+    },
+    "selfcheck_main_vs_training_intersection": {
+      "dmsc_sampled.csv(五级训练源,5万)": 0,
+      "train_5c.pkl(五级)": 0,
+      "val_5c.pkl(五级)": 0,
+      "test_5c.pkl(五级)": 0,
+      "train.pkl(二分类)": 0,
+      "val.pkl(二分类)": 0,
+      "test.pkl(二分类)": 0
+    },
+    "subtle_scan_stats": [
+      {
+        "star": 1,
+        "scanned": 139,
+        "passed": 60
+      },
+      {
+        "star": 2,
+        "scanned": 155,
+        "passed": 60
+      },
+      {
+        "star": 3,
+        "scanned": 169,
+        "passed": 60
+      },
+      {
+        "star": 4,
+        "scanned": 148,
+        "passed": 60
+      },
+      {
+        "star": 5,
+        "scanned": 210,
+        "passed": 60
+      }
+    ],
+    "explicit_lexicon_size": 145,
+    "selfcheck_subtle_intersections": {
+      "dmsc_sampled.csv(五级训练源,5万)": 0,
+      "train_5c.pkl(五级)": 0,
+      "val_5c.pkl(五级)": 0,
+      "test_5c.pkl(五级)": 0,
+      "train.pkl(二分类)": 0,
+      "val.pkl(二分类)": 0,
+      "test.pkl(二分类)": 0,
+      "vs_main_30000": 0
+    }
+  },
+  "binary_posneg_20000": {
+    "n": 20000,
+    "accuracy": 0.67815,
+    "precision_pos": 0.658991521642124,
+    "recall_pos": 0.7384,
+    "f1_pos": 0.6964395189813722,
+    "confusionMatrix_rownegcolpos": [
+      [
+        6179,
+        3821
+      ],
+      [
+        2616,
+        7384
+      ]
+    ],
+    "correct": 13563,
+    "wrong": 6437,
+    "by_group": {
+      "1": {
+        "n": 5000,
+        "pred_pos_rate": 0.3522,
+        "mean_conf": 0.7368842071999999,
+        "accuracy": 0.6478
+      },
+      "2": {
+        "n": 5000,
+        "pred_pos_rate": 0.412,
+        "mean_conf": 0.7401921852000001,
+        "accuracy": 0.588
+      },
+      "4": {
+        "n": 5000,
+        "pred_pos_rate": 0.7188,
+        "mean_conf": 0.7673679254,
+        "accuracy": 0.7188
+      },
+      "5": {
+        "n": 5000,
+        "pred_pos_rate": 0.758,
+        "mean_conf": 0.7689939052,
+        "accuracy": 0.758
+      }
+    }
+  },
+  "binary_neutral_10000": {
+    "n": 10000,
+    "pred_pos": 5508,
+    "pred_neg": 4492,
+    "pred_pos_rate": 0.5508,
+    "mean_conf_overall": 0.7463312304999999,
+    "mean_conf_when_pred_pos": 0.7664421635802469,
+    "mean_conf_when_pred_neg": 0.7216716090828139,
+    "mean_conf_posneg_groups_reference": 0.75335955575
+  },
+  "five_class_30000": {
+    "n": 30000,
+    "exact_accuracy": 0.4704,
+    "within1_accuracy": 0.8579666666666667,
+    "macro_f1": 0.46973810234248525,
+    "per_class": {
+      "非常负面": {
+        "precision": 0.5838330002220742,
+        "recall": 0.5258,
+        "f1": 0.5532989582237188,
+        "support": 5000,
+        "within1_rate": 0.8068
+      },
+      "负面": {
+        "precision": 0.3740525295258241,
+        "recall": 0.4244,
+        "f1": 0.3976389019019957,
+        "support": 5000,
+        "within1_rate": 0.8916
+      },
+      "中性": {
+        "precision": 0.5408223029167155,
+        "recall": 0.4617,
+        "f1": 0.49813885742029457,
+        "support": 10000,
+        "within1_rate": 0.8604
+      },
+      "正面": {
+        "precision": 0.333602976864585,
+        "recall": 0.4124,
+        "f1": 0.3688399964225025,
+        "support": 5000,
+        "within1_rate": 0.9126
+      },
+      "非常正面": {
+        "precision": 0.5252643948296122,
+        "recall": 0.5364,
+        "f1": 0.5307737977439145,
+        "support": 5000,
+        "within1_rate": 0.816
+      }
+    },
+    "confusionMatrix_5x5": [
+      [
+        2629,
+        1405,
+        569,
+        126,
+        271
+      ],
+      [
+        927,
+        2122,
+        1409,
+        323,
+        219
+      ],
+      [
+        586,
+        1715,
+        4617,
+        2272,
+        810
+      ],
+      [
+        155,
+        282,
+        1377,
+        2062,
+        1124
+      ],
+      [
+        206,
+        149,
+        565,
+        1398,
+        2682
+      ]
+    ],
+    "exact_correct": 14112,
+    "exact_wrong": 15888,
+    "within1_correct": 25739
+  },
+  "star_groups": [
+    {
+      "star": 1,
+      "n": 5000,
+      "bin_neg_rate": 0.6478,
+      "bin_mean_conf": 0.7368842071999999,
+      "five_exact": 0.5258,
+      "five_within1": 0.8068
+    },
+    {
+      "star": 2,
+      "n": 5000,
+      "bin_neg_rate": 0.588,
+      "bin_mean_conf": 0.7401921852000001,
+      "five_exact": 0.4244,
+      "five_within1": 0.8916
+    },
+    {
+      "star": 3,
+      "n": 10000,
+      "bin_neg_rate": 0.4492,
+      "bin_mean_conf": 0.7463312304999999,
+      "five_exact": 0.4617,
+      "five_within1": 0.8604
+    },
+    {
+      "star": 4,
+      "n": 5000,
+      "bin_neg_rate": 0.2812,
+      "bin_mean_conf": 0.7673679254,
+      "five_exact": 0.4124,
+      "five_within1": 0.9126
+    },
+    {
+      "star": 5,
+      "n": 5000,
+      "bin_neg_rate": 0.242,
+      "bin_mean_conf": 0.7689939052,
+      "five_exact": 0.5364,
+      "five_within1": 0.816
+    }
+  ],
+  "subtle_300": {
+    "n": 300,
+    "bin_gt_available": 240,
+    "bin_accuracy": 0.6333333333333333,
+    "bin_correct": 152,
+    "bin_wrong": 88,
+    "five_exact": 0.4266666666666667,
+    "five_exact_correct": 128,
+    "five_within1": 0.79,
+    "five_within1_correct": 237,
+    "drop_bin_vs_main": 0.04481666666666673,
+    "drop_five_exact_vs_main": 0.04373333333333329,
+    "drop_five_within1_vs_main": 0.06796666666666662,
+    "per_star": {
+      "1": {
+        "n": 60,
+        "five_exact": 0.5666666666666667,
+        "five_within1": 0.8166666666666667,
+        "bin_neg_rate": 0.75
+      },
+      "2": {
+        "n": 60,
+        "five_exact": 0.45,
+        "five_within1": 0.9166666666666666,
+        "bin_neg_rate": 0.7166666666666667
+      },
+      "3": {
+        "n": 60,
+        "five_exact": 0.4,
+        "five_within1": 0.7333333333333333,
+        "bin_neg_rate": 0.5833333333333334
+      },
+      "4": {
+        "n": 60,
+        "five_exact": 0.26666666666666666,
+        "five_within1": 0.7666666666666667,
+        "bin_neg_rate": 0.45
+      },
+      "5": {
+        "n": 60,
+        "five_exact": 0.45,
+        "five_within1": 0.7166666666666667,
+        "bin_neg_rate": 0.48333333333333334
+      }
+    },
+    "quasi_explicit_flagged": 15
+  },
+  "same_domain_reference": {
+    "binary_test_acc_chnsenticorp": 0.8896247240618101,
+    "five_test_acc_dmsc": 0.4688,
+    "five_test_macro_f1_dmsc": 0.47253542575957885
+  },
+  "generated_at": "2026-11-24 10:44:26"
+}

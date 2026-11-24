@@ -1,0 +1,121 @@
+{
+  "seed": 42,
+  "built_at": "2026-11-24 10:37:01",
+  "length_window_chars": [
+    5,
+    300
+  ],
+  "dmsc_zip_rows_read": 2125056,
+  "valid_star_and_text_rows": 2125056,
+  "dropped_invalid_star_or_empty": 0,
+  "dedup_before": 2125056,
+  "dedup_after": 1941116,
+  "dedup_conflict_dropped": 163894,
+  "exclusion_steps": [
+    {
+      "set": "dmsc_sampled.csv(五级训练源,5万)",
+      "size": 50000,
+      "removed_at_step": 50000,
+      "pool_after": 1891116
+    },
+    {
+      "set": "train_5c.pkl(五级)",
+      "size": 40000,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "val_5c.pkl(五级)",
+      "size": 5000,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "test_5c.pkl(五级)",
+      "size": 5000,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "train.pkl(二分类)",
+      "size": 7248,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "val.pkl(二分类)",
+      "size": 906,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    },
+    {
+      "set": "test.pkl(二分类)",
+      "size": 906,
+      "removed_at_step": 0,
+      "pool_after": 1891116
+    }
+  ],
+  "pool_overlap_with_union_before_exclusion": 50000,
+  "pool_after_triple_exclusion": 1891116,
+  "pool_per_star_after_exclusion": {
+    "1": 158737,
+    "2": 155280,
+    "3": 429489,
+    "4": 582622,
+    "5": 564988
+  },
+  "pool_per_star_after_length_filter": {
+    "1": 157122,
+    "2": 154325,
+    "3": 427204,
+    "4": 579700,
+    "5": 561176
+  },
+  "selfcheck_main_vs_training_intersection": {
+    "dmsc_sampled.csv(五级训练源,5万)": 0,
+    "train_5c.pkl(五级)": 0,
+    "val_5c.pkl(五级)": 0,
+    "test_5c.pkl(五级)": 0,
+    "train.pkl(二分类)": 0,
+    "val.pkl(二分类)": 0,
+    "test.pkl(二分类)": 0
+  },
+  "subtle_scan_stats": [
+    {
+      "star": 1,
+      "scanned": 139,
+      "passed": 60
+    },
+    {
+      "star": 2,
+      "scanned": 155,
+      "passed": 60
+    },
+    {
+      "star": 3,
+      "scanned": 169,
+      "passed": 60
+    },
+    {
+      "star": 4,
+      "scanned": 148,
+      "passed": 60
+    },
+    {
+      "star": 5,
+      "scanned": 210,
+      "passed": 60
+    }
+  ],
+  "explicit_lexicon_size": 145,
+  "selfcheck_subtle_intersections": {
+    "dmsc_sampled.csv(五级训练源,5万)": 0,
+    "train_5c.pkl(五级)": 0,
+    "val_5c.pkl(五级)": 0,
+    "test_5c.pkl(五级)": 0,
+    "train.pkl(二分类)": 0,
+    "val.pkl(二分类)": 0,
+    "test.pkl(二分类)": 0,
+    "vs_main_30000": 0
+  }
+}

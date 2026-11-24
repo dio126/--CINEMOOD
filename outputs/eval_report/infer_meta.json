@@ -1,0 +1,9 @@
+{
+  "bin_run": "bilstm_lr5e-4_do0.3_pretune",
+  "five_run": "5c_bilstm_pretune_h256",
+  "device": "cuda",
+  "batch_size": 256,
+  "started_at": "2026-11-24 10:40:43",
+  "finished_at": "2026-11-24 10:40:51",
+  "wall_seconds": 8.2
+}
