@@ -49,6 +49,13 @@ class SentimentPredictor:
         self.is_bert = self.ckpt["config"].get("model_type") == "bert"
         self.maxlen = self.ckpt["config"].get("maxlen", 128)
         self._tokenizer = None
+        # 置信度校准:若存在 src/calibrate.py 产出的温度文件则应用(T>0 只改变
+        # 概率软硬、不改变 argmax 预测;文件缺失时 T=1,行为与旧版完全一致)
+        self.temperature = 1.0
+        t_file = os.path.join(OUT_DIR, f"{run_name}_temperature.json")
+        if run_name and os.path.exists(t_file):
+            with open(t_file, encoding="utf-8") as f:
+                self.temperature = float(json.load(f).get("temperature", 1.0))
 
     @property
     def tokenizer(self):
@@ -90,7 +97,7 @@ class SentimentPredictor:
             x = enc["input_ids"].to(self.device)
             with torch.no_grad():
                 logits = self.model(x)
-            probs = torch.softmax(logits[0], dim=-1).cpu().numpy()
+            probs = torch.softmax(logits[0] / self.temperature, dim=-1).cpu().numpy()
             n_valid = int(enc["attention_mask"][0].sum())
             words = self.tokenizer.convert_ids_to_tokens(enc["input_ids"][0][:n_valid].tolist())
             return self._probs_to_result(probs, words)
@@ -110,7 +117,7 @@ class SentimentPredictor:
             else:
                 logits, weights = out, None
 
-            probs = torch.softmax(logits[0], dim=-1).cpu().numpy()
+            probs = torch.softmax(logits[0] / self.temperature, dim=-1).cpu().numpy()
         label = int(np.argmax(probs))
         # 极性与概率字典按任务类型映射(二分类键名保持 负面/正面 不变,零回归)
         if self.num_classes == 5:
@@ -147,7 +154,7 @@ class SentimentPredictor:
                                          padding="max_length", return_tensors="pt")
                     x = enc["input_ids"].to(self.device)
                     logits = self.model(x)
-                    probs = torch.softmax(logits, dim=-1).cpu().numpy()
+                    probs = torch.softmax(logits / self.temperature, dim=-1).cpu().numpy()
                     labels.extend(probs.argmax(axis=1).tolist())
                     confs.extend(probs.max(axis=1).tolist())
             return labels, confs
@@ -163,7 +170,7 @@ class SentimentPredictor:
                 x = torch.from_numpy(ids).to(self.device)
                 out = self.model(x)
                 logits = out[0] if isinstance(out, tuple) else out  # 注意力模型返回 (logits, alpha)
-                probs = torch.softmax(logits, dim=-1).cpu().numpy()
+                probs = torch.softmax(logits / self.temperature, dim=-1).cpu().numpy()
                 labels.extend(probs.argmax(axis=1).tolist())
                 confs.extend(probs.max(axis=1).tolist())
         return labels, confs

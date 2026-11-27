@@ -1,0 +1,9 @@
+{
+  "temperature": 1.5386654923755578,
+  "val_nll_raw": 1.2800581455230713,
+  "val_nll_calibrated": 1.2306573390960693,
+  "val_ece_raw": 0.09287606167197227,
+  "val_ece_calibrated": 0.01743610755205153,
+  "val_acc": 0.4656,
+  "n_val": 5000
+}

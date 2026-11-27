@@ -1,0 +1,209 @@
+{
+  "5c300k_bilstm_pretune_h256": {
+    "temperature": 1.0340658205184192,
+    "val_nll_raw": 1.1072096824645996,
+    "val_nll_calibrated": 1.106945514678955,
+    "val_ece_raw": 0.012394284994403528,
+    "val_ece_calibrated": 0.009903114606936757,
+    "val_acc": 0.5215333333333333,
+    "n_val": 30000
+  },
+  "5c_attn_pretune": {
+    "temperature": 1.5386654923755578,
+    "val_nll_raw": 1.2800581455230713,
+    "val_nll_calibrated": 1.2306573390960693,
+    "val_ece_raw": 0.09287606167197227,
+    "val_ece_calibrated": 0.01743610755205153,
+    "val_acc": 0.4656,
+    "n_val": 5000
+  },
+  "5c_bilstm_pretune": {
+    "temperature": 1.2604002346893297,
+    "val_nll_raw": 1.2358061075210571,
+    "val_nll_calibrated": 1.2229524850845337,
+    "val_ece_raw": 0.05849087295532225,
+    "val_ece_calibrated": 0.0113716600716114,
+    "val_acc": 0.4604,
+    "n_val": 5000
+  },
+  "5c_bilstm_pretune_h256": {
+    "temperature": 1.1874372958983261,
+    "val_nll_raw": 1.2272154092788696,
+    "val_nll_calibrated": 1.220470666885376,
+    "val_ece_raw": 0.037811923021078116,
+    "val_ece_calibrated": 0.024769133013486842,
+    "val_acc": 0.4612,
+    "n_val": 5000
+  },
+  "5c_bilstm_random": {
+    "temperature": 1.4597960482671175,
+    "val_nll_raw": 1.2818703651428223,
+    "val_nll_calibrated": 1.245483636856079,
+    "val_ece_raw": 0.08641826683878899,
+    "val_ece_calibrated": 0.006725481986999501,
+    "val_acc": 0.4568,
+    "n_val": 5000
+  },
+  "attn_lr1e-4_do0.3": {
+    "temperature": 1.5930870978486587,
+    "val_nll_raw": 0.41557684540748596,
+    "val_nll_calibrated": 0.376420795917511,
+    "val_ece_raw": 0.06676482555618873,
+    "val_ece_calibrated": 0.042744406077509164,
+    "val_acc": 0.8432671081677704,
+    "n_val": 906
+  },
+  "attn_lr1e-4_do0.3_pretune": {
+    "temperature": 0.9633465293897311,
+    "val_nll_raw": 0.30952370166778564,
+    "val_nll_calibrated": 0.30932536721229553,
+    "val_ece_raw": 0.0165629970448433,
+    "val_ece_calibrated": 0.01604541629618631,
+    "val_acc": 0.8830022075055187,
+    "n_val": 906
+  },
+  "attn_lr1e-4_do0.5": {
+    "temperature": 2.7584355949722483,
+    "val_nll_raw": 0.6124913096427917,
+    "val_nll_calibrated": 0.38975998759269714,
+    "val_ece_raw": 0.11786577605516971,
+    "val_ece_calibrated": 0.012532468399990998,
+    "val_acc": 0.847682119205298,
+    "n_val": 906
+  },
+  "bert_roberta_wwm_5c": {
+    "temperature": 1.5442231588054103,
+    "val_nll_raw": 1.1190637350082397,
+    "val_nll_calibrated": 1.0517473220825195,
+    "val_ece_raw": 0.12628406852483753,
+    "val_ece_calibrated": 0.027169502878189065,
+    "val_acc": 0.5478,
+    "n_val": 5000
+  },
+  "bert_roberta_wwm": {
+    "temperature": 1.1406429844053645,
+    "val_nll_raw": 0.21701699495315552,
+    "val_nll_calibrated": 0.21424606442451477,
+    "val_ece_raw": 0.024014268358285337,
+    "val_ece_calibrated": 0.0193388784431727,
+    "val_acc": 0.9161147902869757,
+    "n_val": 906
+  },
+  "bert_roberta_wwm_mixdom": {
+    "temperature": 1.3673241019913553,
+    "val_nll_raw": 0.2573956847190857,
+    "val_nll_calibrated": 0.24271564185619354,
+    "val_ece_raw": 0.0337836473779293,
+    "val_ece_calibrated": 0.007866409546105244,
+    "val_acc": 0.9021606196494089,
+    "n_val": 4906
+  },
+  "bilstm_lr1e-3_do0.3": {
+    "temperature": 1.6412132363445424,
+    "val_nll_raw": 0.3802895247936249,
+    "val_nll_calibrated": 0.3394777774810791,
+    "val_ece_raw": 0.0601532512547954,
+    "val_ece_calibrated": 0.016501130515639627,
+    "val_acc": 0.8543046357615894,
+    "n_val": 906
+  },
+  "bilstm_lr1e-3_do0.5": {
+    "temperature": 1.4084815319309423,
+    "val_nll_raw": 0.38262760639190674,
+    "val_nll_calibrated": 0.3636072278022766,
+    "val_ece_raw": 0.04842046278201984,
+    "val_ece_calibrated": 0.009972789034938197,
+    "val_acc": 0.8410596026490066,
+    "n_val": 906
+  },
+  "bilstm_lr1e-4_do0.3": {
+    "temperature": 1.700865479788902,
+    "val_nll_raw": 0.4391031265258789,
+    "val_nll_calibrated": 0.39006584882736206,
+    "val_ece_raw": 0.06546078691419387,
+    "val_ece_calibrated": 0.026289022521467392,
+    "val_acc": 0.847682119205298,
+    "n_val": 906
+  },
+  "bilstm_lr1e-4_do0.3_h256": {
+    "temperature": 1.5091249004360134,
+    "val_nll_raw": 0.38150349259376526,
+    "val_nll_calibrated": 0.35458114743232727,
+    "val_ece_raw": 0.04600573026844473,
+    "val_ece_calibrated": 0.01717169336135812,
+    "val_acc": 0.8543046357615894,
+    "n_val": 906
+  },
+  "bilstm_lr1e-4_do0.3_h64": {
+    "temperature": 1.2074027305939223,
+    "val_nll_raw": 0.3952033221721649,
+    "val_nll_calibrated": 0.3895299434661865,
+    "val_ece_raw": 0.030049023315080227,
+    "val_ece_calibrated": 0.012342354648686951,
+    "val_acc": 0.8388520971302428,
+    "n_val": 906
+  },
+  "bilstm_lr1e-4_do0.3_pretrained": {
+    "temperature": 0.940290774845408,
+    "val_nll_raw": 0.30673572421073914,
+    "val_nll_calibrated": 0.3062235713005066,
+    "val_ece_raw": 0.017554103999211562,
+    "val_ece_calibrated": 0.023102533409400716,
+    "val_acc": 0.8796909492273731,
+    "n_val": 906
+  },
+  "bilstm_lr1e-4_do0.3_pretune": {
+    "temperature": 1.1691341807280013,
+    "val_nll_raw": 0.31097283959388733,
+    "val_nll_calibrated": 0.3074414134025574,
+    "val_ece_raw": 0.029935492256092974,
+    "val_ece_calibrated": 0.028479412296749863,
+    "val_acc": 0.891832229580574,
+    "n_val": 906
+  },
+  "bilstm_lr1e-4_do0.5": {
+    "temperature": 1.9456767216983721,
+    "val_nll_raw": 0.47494834661483765,
+    "val_nll_calibrated": 0.395189493894577,
+    "val_ece_raw": 0.08517030578838544,
+    "val_ece_calibrated": 0.03290606130564186,
+    "val_acc": 0.8443708609271523,
+    "n_val": 906
+  },
+  "bilstm_lr5e-4_do0.3": {
+    "temperature": 1.7670987594296617,
+    "val_nll_raw": 0.410569965839386,
+    "val_nll_calibrated": 0.3541640639305115,
+    "val_ece_raw": 0.06772957159983398,
+    "val_ece_calibrated": 0.02208539323827816,
+    "val_acc": 0.8653421633554084,
+    "n_val": 906
+  },
+  "bilstm_lr5e-4_do0.3_pretune": {
+    "temperature": 1.1734724703323192,
+    "val_nll_raw": 0.2851406931877136,
+    "val_nll_calibrated": 0.2814211845397949,
+    "val_ece_raw": 0.01920462016501434,
+    "val_ece_calibrated": 0.013618561342588811,
+    "val_acc": 0.8951434878587197,
+    "n_val": 906
+  },
+  "bilstm_lr5e-4_do0.5": {
+    "temperature": 1.4805266964552601,
+    "val_nll_raw": 0.38725727796554565,
+    "val_nll_calibrated": 0.36039024591445923,
+    "val_ece_raw": 0.05533151450272953,
+    "val_ece_calibrated": 0.01396482630281257,
+    "val_acc": 0.847682119205298,
+    "n_val": 906
+  },
+  "mixdom_bilstm_lr5e-4_do0.3_pretune": {
+    "temperature": 1.1954079208217774,
+    "val_nll_raw": 0.33984413743019104,
+    "val_nll_calibrated": 0.33531442284584045,
+    "val_ece_raw": 0.02438374288316364,
+    "val_ece_calibrated": 0.0030877137738152755,
+    "val_acc": 0.8560945780676722,
+    "n_val": 4906
+  }
+}

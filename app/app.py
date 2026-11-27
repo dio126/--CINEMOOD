@@ -1399,14 +1399,39 @@ def page_batch(theme_id: str):
         page_footer()
         return
 
-    with st.spinner("批量推理中…"):
-        rows = []
-        for t in texts:
-            if _has_valid_tokens(t):
-                rows.append(predictor.predict(t) | {"text": t[:200]})
-            else:  # 空/纯符号行不进模型,结果表标注"无法判断"
-                rows.append({"text": t[:200], "polarity": "无法判断",
-                             "confidence": None, "num_classes": predictor.num_classes})
+    # 批量推理:走 predict_batch 向量化路径(一次前向算一批,与单条 predict
+    # 同一预处理代码,GPU 快 3~5 倍);纯符号行先剔除、事后标注"无法判断"。
+    valid_texts = [t for t in texts if _has_valid_tokens(t)]
+    progress = st.progress(0.0, text=f"批量推理中… 共 {len(valid_texts)} 条有效评论")
+    if valid_texts:
+        # 分块调用并更新进度条(大 CSV 时可见进展,不再黑盒等待)
+        labels, confs = [], []
+        CHUNK = 64
+        for i in range(0, len(valid_texts), CHUNK):
+            part_labels, part_confs = predictor.predict_batch(valid_texts[i:i + CHUNK], batch_size=CHUNK)
+            labels.extend(part_labels)
+            confs.extend(part_confs)
+            progress.progress(min((i + CHUNK) / max(len(valid_texts), 1), 1.0),
+                              text=f"批量推理中… {min(i + CHUNK, len(valid_texts))}/{len(valid_texts)}")
+        if predictor.num_classes == 5:
+            from preprocess_5class import CLASS_NAMES
+            polarity_of = {k: v for k, v in enumerate(CLASS_NAMES)}
+        else:
+            polarity_of = {0: "负面", 1: "正面"}
+        pred_map = {t: (polarity_of.get(l, str(l)), c) for t, l, c in zip(valid_texts, labels, confs)}
+        progress.progress(1.0, text=f"批量推理完成 · {len(valid_texts)} 条")
+    else:
+        pred_map = {}
+        progress.progress(1.0, text="无有效评论可分析")
+    rows = []
+    for t in texts:
+        if t in pred_map:  # 有效行:用批量结果(极性+校准置信度)
+            pol, conf = pred_map[t]
+            rows.append({"text": t[:200], "polarity": pol, "confidence": conf,
+                         "num_classes": predictor.num_classes})
+        else:  # 空/纯符号行不进模型,结果表标注"无法判断"
+            rows.append({"text": t[:200], "polarity": "无法判断",
+                         "confidence": None, "num_classes": predictor.num_classes})
     result = pd.DataFrame([
         {"text": r["text"], "情感极性": r["polarity"],
          "置信度": "—" if r.get("confidence") is None else f"{r['confidence']:.1%}"}
